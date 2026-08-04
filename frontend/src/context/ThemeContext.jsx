@@ -4,7 +4,7 @@ const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('app-theme') || 'cyber';
+    return localStorage.getItem('app-theme') || 'saas-dark';
   });
 
   useEffect(() => {
@@ -12,7 +12,15 @@ export const ThemeProvider = ({ children }) => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  const themes = ['cyber', 'aurora', 'matrix', 'solar', 'ice'];
+  const themes = [
+    'saas-dark',
+    'saas-light',
+    'cyber-neon',
+    'aurora-sunset',
+    'matrix-green',
+    'solar-flares',
+    'ice-crystal'
+  ];
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, themes }}>

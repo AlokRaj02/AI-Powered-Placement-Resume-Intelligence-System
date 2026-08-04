@@ -1,26 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, FileText, Briefcase, ChevronRight, Loader2, Terminal, Activity } from 'lucide-react';
+import { UploadCloud, FileText, Briefcase, Loader2, Sparkles, Target, Award, Shield } from 'lucide-react';
 import axios from 'axios';
-
 import ParticleNetwork from './animations/ParticleNetwork';
 import GridBackground from './animations/GridBackground';
-import TypingHero from './animations/TypingHero';
-import TechTicker from './animations/TechTicker';
-import TerminalDemo from './animations/TerminalDemo';
-import ProcessTimeline from './animations/ProcessTimeline';
-import SkillMatchBars from './animations/SkillMatchBars';
-
-import GlobalStats from './homepage/GlobalStats';
-import CoreFeaturesGrid from './homepage/CoreFeaturesGrid';
-import LiveActivityFeed from './homepage/LiveActivityFeed';
+import { useTheme } from '../context/ThemeContext';
 
 const UploadForm = () => {
   const [file, setFile] = useState(null);
   const [jobDescription, setJobDescription] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
@@ -39,10 +29,10 @@ const UploadForm = () => {
   };
 
   const handleFileSelection = (selectedFile) => {
-    if (selectedFile.type.includes('pdf') || selectedFile.type.includes('word')) {
+    if (selectedFile.type.includes('pdf') || selectedFile.type.includes('word') || selectedFile.name.endsWith('.docx') || selectedFile.name.endsWith('.pdf')) {
       setFile(selectedFile); setError('');
     } else {
-      setError('Please upload a PDF or DOC resume.'); setFile(null);
+      setError('Please upload a PDF or DOCX resume.'); setFile(null);
     }
   };
 
@@ -65,139 +55,170 @@ const UploadForm = () => {
       localStorage.setItem('latest_analysis', JSON.stringify(response.data));
       navigate('/dashboard', { state: { result: response.data } });
     } catch (err) {
-      setError(err.response?.data?.error || 'Analysis failed. Target core offline.');
+      setError(err.response?.data?.error || 'Analysis failed. Connection offline.');
     } finally { setIsAnalyzing(false); }
   };
 
+  const { theme } = useTheme();
+  const isCyberTheme = ['cyber-neon', 'aurora-sunset', 'matrix-green', 'solar-flares'].includes(theme);
+
   return (
-    <div className="page-wrapper">
-      <ParticleNetwork />
-      <GridBackground />
-      <div className="scanline-overlay"></div>
-
-      {/* Main Content */}
-      <div className="container" style={{ marginTop: '2rem' }}>
-        
-        {/* HERO SECTION */}
-        <div className="text-center mb-8 animate-fade-in" style={{ position: 'relative', zIndex: 10 }}>
-          <h1 style={{ fontSize: '3rem', margin: '0 0 1rem 0', textShadow: '0 0 20px var(--glow-color)' }}>
-            <TypingHero 
-              phrases={[
-                "SYSTEM OVERRIDE: PERFECT MATCH", 
-                "OPTIMIZE YOUR CORE METRICS", 
-                "NEURAL ATS BYPASS INITIATED", 
-                "CALCULATING SYNERGY PROBABILITY"
-              ]} 
-              typingSpeed={50}
-            />
-          </h1>
-          <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)', fontFamily: 'var(--font-secondary)', maxWidth: '600px', margin: '0 auto' }}>
-            Upload your candidate data and the target spec. 
-            Our semantic engine will evaluate the alignment index in real-time.
-          </p>
-          <ProcessTimeline />
-          <GlobalStats />
-        </div>
-
-
-
-        {/* UPLOAD CARDS */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
-          
-          <div className="card animate-fade-in" style={{ animationDelay: '0.2s' }}>
-            <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
-              <FileText size={24} /> // DATA_INPUT: RESUME
-            </h2>
-            <div 
-              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                border: `2px dashed ${isDragging ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                borderRadius: 'var(--radius-md)', padding: '3rem 2rem', textAlign: 'center',
-                cursor: 'pointer', background: isDragging ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)',
-                transition: 'var(--transition)'
-              }}
-            >
-              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,.doc,.docx" hidden />
-              {file ? (
-                <div>
-                  <FileText size={48} style={{ color: 'var(--success)', margin: '0 auto 1rem' }} />
-                  <div style={{ color: 'var(--primary-color)', fontFamily: 'var(--font-secondary)' }}>{file.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{(file.size/1024/1024).toFixed(2)} MB</div>
-                </div>
-              ) : (
-                <div>
-                  <UploadCloud size={48} style={{ color: 'var(--text-muted)', margin: '0 auto 1rem' }} />
-                  <div style={{ color: 'var(--text-color)', marginBottom: '0.5rem', fontFamily: 'var(--font-secondary)' }}>DRAG & DROP FILE HERE</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>SUPPORTED: PDF, DOCX (MAX 5MB)</div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="card animate-fade-in" style={{ animationDelay: '0.3s', display: 'flex', flexDirection: 'column' }}>
-            <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
-              <Briefcase size={24} /> // TARGET_SPEC: JOB DESC
-            </h2>
-            <textarea
-              className="form-control"
-              style={{ flex: 1, resize: 'none', minHeight: '150px' }}
-              placeholder="Paste the target job description parameters here to compute semantic match..."
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {error && (
-          <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', color: 'var(--danger)', padding: '1rem', borderRadius: 'var(--radius-md)', marginTop: '2rem', textAlign: 'center', fontFamily: 'var(--font-secondary)' }}>
-            ⚠️ CRITICAL ERROR: {error}
-          </div>
-        )}
-
-        <div className="text-center animate-fade-in" style={{ animationDelay: '0.4s', marginTop: '3rem', marginBottom: '3rem' }}>
-          <button className="btn btn-primary" style={{ padding: '1rem 3rem', fontSize: '1.2rem' }} onClick={handleSubmit} disabled={!file || !jobDescription || isAnalyzing}>
-            {isAnalyzing ? (
-              <><Loader2 className="spinner" size={24} style={{ animation: 'spin 1s linear infinite' }} /> PROCESSING_REQUEST...</>
-            ) : (
-              <><Activity size={24}/> INITIATE_ANALYSIS</>
-            )}
-          </button>
-          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-        </div>
-
-        {/* DEMO / FEATURES SECTION */}
-        <CoreFeaturesGrid />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', paddingBottom: '4rem' }}>
-          <div className="card">
-             <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Terminal size={20}/> LOG_OUTPUT</h3>
-             {!showDemo ? (
-               <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                 <button className="btn btn-outline" onClick={() => setShowDemo(true)}>RUN SIMULATION</button>
-               </div>
-             ) : (
-               <TerminalDemo />
-             )}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <div className="card">
-              <h3 style={{ marginBottom: '1rem' }}>PREDICTIVE_MATCH_MODEL</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>Example rendering of the deep learning skill evaluation matrix.</p>
-              <SkillMatchBars skills={[
-                { name: 'React Architecture', score: 94 },
-                { name: 'Node.js Microservices', score: 88 },
-                { name: 'Docker / Kubernetes', score: 72 },
-                { name: 'System Design', score: 81 }
-              ]} />
-            </div>
-            <LiveActivityFeed />
-          </div>
-        </div>
-
-      </div>
+    <div className="page-wrapper" style={{ minHeight: 'auto' }}>
+      {isCyberTheme && (
+        <>
+          <ParticleNetwork />
+          <GridBackground />
+          <div className="scanline-overlay"></div>
+        </>
+      )}
       
-      {/* Tech Ticker full width at bottom */}
-      <TechTicker />
+      {/* Hero Section */}
+      <div className="text-center" style={{ maxWidth: '800px', margin: '3rem auto 4rem auto', position: 'relative', zIndex: 10 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'var(--primary-light)', color: 'var(--primary-color)', padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, marginBottom: '1.5rem', border: '1px solid rgba(99,102,241,0.15)' }}>
+          <Sparkles size={14} /> Next-Gen Semantic ATS Matching
+        </div>
+        
+        <h1 style={{ fontSize: '3rem', fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 1.25rem 0', lineHeight: '1.15' }}>
+          Evaluate Your Resume Against <span style={{ background: 'linear-gradient(to right, var(--primary-color), #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Target Roles</span> Instantly
+        </h1>
+        
+        <p className="text-muted" style={{ fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6' }}>
+          Upload your CV and specify the job criteria. Our AI scoring engine evaluates alignment probability and generates actionable optimization steps.
+        </p>
+      </div>
+
+      {/* Main Grid: Upload resume + paste job description */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
+        
+        {/* Resume upload Card */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '340px' }}>
+          <div>
+            <h2 className="card-title" style={{ borderBottom: 'none', marginBottom: '0.5rem' }}>
+              <FileText size={20} className="text-primary" /> Candidate Resume
+            </h2>
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: '0 0 1.5rem 0' }}>
+              Upload your latest curriculum vitae in PDF or Word format.
+            </p>
+          </div>
+          
+          <div 
+            onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: `2px dashed ${isDragging ? 'var(--primary-color)' : 'var(--border-color)'}`,
+              borderRadius: 'var(--radius-md)', padding: '2.5rem 1.5rem', textAlign: 'center',
+              cursor: 'pointer', background: isDragging ? 'var(--primary-light)' : 'rgba(0,0,0,0.05)',
+              transition: 'var(--transition)',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}
+          >
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,.doc,.docx" hidden />
+            {file ? (
+              <div>
+                <FileText size={42} className="text-success" style={{ margin: '0 auto 0.75rem' }} />
+                <div style={{ fontWeight: 600, color: 'var(--text-color)', fontSize: '0.95rem' }}>{file.name}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{(file.size/1024/1024).toFixed(2)} MB</div>
+              </div>
+            ) : (
+              <div>
+                <UploadCloud size={42} className="text-muted" style={{ margin: '0 auto 0.75rem' }} />
+                <div style={{ fontWeight: 600, color: 'var(--text-color)', fontSize: '0.95rem', marginBottom: '0.25rem' }}>Drag & Drop file here</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Supports PDF, DOCX (Max 5MB)</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Job Description Card */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: '340px' }}>
+          <div>
+            <h2 className="card-title" style={{ borderBottom: 'none', marginBottom: '0.5rem' }}>
+              <Briefcase size={20} className="text-primary" /> Target Specification
+            </h2>
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: '0 0 1.5rem 0' }}>
+              Paste the target job description or core competency criteria.
+            </p>
+          </div>
+          <textarea
+            className="form-control"
+            style={{ flex: 1, resize: 'none', minHeight: '150px', background: 'rgba(0,0,0,0.05)' }}
+            placeholder="Requirements, responsibilities, or key technology skills required for the position..."
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ background: 'var(--danger-light)', border: '1px solid rgba(244, 63, 94, 0.2)', color: 'var(--danger)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '3rem', textAlign: 'center', fontWeight: 500, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+          <AlertCircle size={18} /> {error}
+        </div>
+      )}
+
+      {/* Submit Button wrapper */}
+      <div className="text-center" style={{ marginBottom: '5rem' }}>
+        <button 
+          className="btn btn-primary" 
+          style={{ padding: '0.85rem 3rem', fontSize: '1.05rem', minWidth: '240px' }} 
+          onClick={handleSubmit} 
+          disabled={!file || !jobDescription || isAnalyzing}
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="spin" size={18} />
+              ANALYZING DRAFT...
+            </>
+          ) : (
+            <>
+              <Target size={18} />
+              Analyze Alignment
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Beautiful Features section */}
+      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '4rem', paddingBottom: '4rem' }}>
+        <h3 className="text-center" style={{ marginBottom: '3rem', fontSize: '1.75rem', fontWeight: 800 }}>Engine Capabilities</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem' }}>
+          
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <Target size={24} className="text-primary" style={{ marginBottom: '1rem' }} />
+            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>Semantic Match Engine</h4>
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+              Calculates keyword relevance, skill alignment, and domain context match probabilities rather than simple text string matches.
+            </p>
+          </div>
+
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <Award size={24} className="text-primary" style={{ marginBottom: '1rem' }} />
+            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>SaaS Sandbox Optimizer</h4>
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+              Provides a split-pane interactive workspace to edit resume text directly, generate custom bullet points, and check score changes.
+            </p>
+          </div>
+
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <Shield size={24} className="text-primary" style={{ marginBottom: '1rem' }} />
+            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>Bypass ATS Filters</h4>
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+              Evaluates formatting issues, missing core capabilities, and structure standards to maximize chances of reaching recruiters.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* CSS Utility spinner */}
+      <style>{`
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; }
+      `}</style>
+
     </div>
   );
 };

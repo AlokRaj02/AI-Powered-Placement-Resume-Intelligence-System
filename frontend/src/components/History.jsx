@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Clock, ExternalLink } from 'lucide-react';
+import { Clock, ExternalLink, Sliders } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const History = () => {
@@ -97,18 +97,33 @@ const History = () => {
                                 </div>
 
                                 {expandedId === item.id && (
-                                    <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', display: 'flex', gap: '2rem', flexWrap: 'wrap' }} className="animate-fade-in">
-                                        <div style={{ flex: '1 1 45%' }}>
-                                            <h4 style={{ color: 'var(--primary-color)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>// INPUT: RESUME TEXT</h4>
-                                            <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
-                                                {item.resume_text || 'No resume text available for this record.'}
+                                    <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }} className="animate-fade-in">
+                                        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                                            <div style={{ flex: '1 1 45%' }}>
+                                                <h4 style={{ color: 'var(--primary-color)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>// INPUT: RESUME TEXT</h4>
+                                                <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
+                                                    {item.resume_text || 'No resume text available for this record.'}
+                                                </div>
+                                            </div>
+                                            <div style={{ flex: '1 1 45%' }}>
+                                                <h4 style={{ color: 'var(--primary-color)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>// TARGET: JOB DESCRIPTION</h4>
+                                                <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
+                                                    {item.job_description || 'No job description available for this record.'}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div style={{ flex: '1 1 45%' }}>
-                                            <h4 style={{ color: 'var(--primary-color)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>// TARGET: JOB DESCRIPTION</h4>
-                                            <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
-                                                {item.job_description || 'No job description available for this record.'}
-                                            </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                            <button 
+                                                className="btn btn-outline" 
+                                                style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    localStorage.setItem('latest_analysis', JSON.stringify(item));
+                                                    navigate('/optimizer', { state: { result: item } });
+                                                }}
+                                            >
+                                                <Sliders size={14} style={{ marginRight: '0.3rem' }} /> Open in Sandbox Optimizer
+                                            </button>
                                         </div>
                                     </div>
                                 )}

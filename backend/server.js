@@ -165,24 +165,31 @@ app.post('/api/auth/reset-password', async (req, res) => {
  */
 app.post('/api/analyze', optionalAuth, upload.single('resume'), async (req, res) => {
     try {
-        const { job_description } = req.body;
+        const { job_description, resume_text: body_resume_text } = req.body;
         const file = req.file;
 
-        if (!file || !job_description) {
-            return res.status(400).json({ error: "Missing resume or job description" });
+        if (!job_description) {
+            return res.status(400).json({ error: "Missing job description" });
+        }
+        if (!file && !body_resume_text) {
+            return res.status(400).json({ error: "Missing resume file or resume text" });
         }
 
-        // 1. Extract text from PDF
+        // 1. Extract or use text
         let resume_text = '';
-        if (file.mimetype === 'application/pdf') {
-            const pdfData = await pdfParse(file.buffer);
-            resume_text = pdfData.text;
-        } else if (file.originalname && file.originalname.toLowerCase().endsWith('.docx')) {
-            const docxData = await mammoth.extractRawText({ buffer: file.buffer });
-            resume_text = docxData.value;
+        if (file) {
+            if (file.mimetype === 'application/pdf') {
+                const pdfData = await pdfParse(file.buffer);
+                resume_text = pdfData.text;
+            } else if (file.originalname && file.originalname.toLowerCase().endsWith('.docx')) {
+                const docxData = await mammoth.extractRawText({ buffer: file.buffer });
+                resume_text = docxData.value;
+            } else {
+                // Basic fallback for pure text
+                resume_text = file.buffer.toString('utf8');
+            }
         } else {
-            // Basic fallback for pure text
-            resume_text = file.buffer.toString('utf8');
+            resume_text = body_resume_text;
         }
 
         // 2. Call AI API
@@ -233,12 +240,73 @@ app.post('/api/analyze', optionalAuth, upload.single('resume'), async (req, res)
             skills_breakdown: newAnalysis.skills_breakdown || [],
             cv_explanations: newAnalysis.cv_explanations || [],
             feedback: newAnalysis.feedback,
-            created_at: newAnalysis.created_at
+            created_at: newAnalysis.created_at,
+            resume_text: newAnalysis.resume_text,
+            job_description: newAnalysis.job_description
         });
 
     } catch (err) {
         console.error("Analysis Error:", err);
         res.status(500).json({ error: err.message || "An error occurred during analysis" });
+    }
+});
+
+/**
+ * Endpoint to suggest resume bullet points incorporating a missing skill
+ */
+app.post('/api/optimize/suggest', optionalAuth, async (req, res) => {
+    try {
+        const { resume_text, job_description, missing_skill } = req.body;
+
+        if (!resume_text || !job_description || !missing_skill) {
+            return res.status(400).json({ error: "Missing resume text, job description, or missing skill" });
+        }
+
+        const SUGGEST_PROMPT = `You are a professional ATS resume optimizer and recruiter.
+Given a candidate's resume text, a target job description, and a specific missing skill, generate 3 tailored, highly professional bullet points or achievement statements that the candidate can naturally add to their resume to demonstrate experience/proficiency with the missing skill.
+Guidelines:
+1. Make them sound realistic based on the candidate's existing background (do not invent grand titles, but frame skills realistically in tech/engineering contexts).
+2. Align them with the context of the job description.
+3. Keep each suggestion concise (1-2 sentences).
+4. Return only a valid JSON response with the following structure, and nothing else (no markdown wrappers like \`\`\`json):
+{
+  "bullet_points": [
+    "Generated bullet point 1",
+    "Generated bullet point 2",
+    "Generated bullet point 3"
+  ]
+}`;
+
+        const response = await ai.models.generateContent({
+             model: 'gemini-2.5-flash',
+             contents: [
+                 { text: SUGGEST_PROMPT },
+                 { text: `CANDIDATE RESUME:\n${resume_text}\n\nTARGET JOB DESCRIPTION:\n${job_description}\n\nMISSING SKILL TO INTEGRATE:\n${missing_skill}` }
+             ],
+             config: {
+                 responseMimeType: 'application/json'
+             }
+        });
+
+        const aiText = response.text;
+        let aiResult;
+        try {
+            const startIdx = aiText.indexOf('{');
+            const endIdx = aiText.lastIndexOf('}');
+            if (startIdx !== -1 && endIdx !== -1) {
+                aiResult = JSON.parse(aiText.substring(startIdx, endIdx + 1));
+            } else {
+                aiResult = JSON.parse(aiText);
+            }
+        } catch (e) {
+            console.error("JSON Parsing Error from AI suggest:", e);
+            return res.status(500).json({ error: "AI returned invalid JSON", details: aiText });
+        }
+
+        res.json(aiResult);
+    } catch (err) {
+        console.error("Suggest Error:", err);
+        res.status(500).json({ error: err.message || "An error occurred during suggestion generation" });
     }
 });
 
@@ -266,6 +334,66 @@ app.get('/api/history', protect, async (req, res) => {
     } catch (err) {
         console.error("History Error:", err);
         res.status(500).json({ error: "Failed to fetch history" });
+    }
+});
+
+/**
+ * Endpoint for chatbot assistant
+ */
+app.post('/api/chat', async (req, res) => {
+    try {
+        const { message, history } = req.body;
+        if (!message) {
+            return res.status(400).json({ error: "Missing message parameter" });
+        }
+
+        const CHAT_SYSTEM_PROMPT = `You are the AI Chatbot Assistant for the "Resume AI" (AI Resume Analyzer) application.
+Your goal is to help users understand this website, explain how its features work, guide them on optimizing their resumes, and answer questions about the project's technical architecture.
+Be professional, friendly, concise, and helpful. Keep responses under 4 sentences unless asked for detailed explanations, and format them in clear markdown.
+
+Details about this project & website:
+1. What is this app?
+   Resume AI is a semantic applicant tracking evaluation engine. It processes resumes (PDF, DOCX) and matches them against job descriptions.
+2. Tech Stack:
+   - Frontend: React, Vite, Vanilla CSS, Lucide Icons, html2pdf.js.
+   - Backend: Node.js, Express, MongoDB/Mongoose.
+   - AI Engine: Google Gemini API (gemini-2.5-flash) via @google/genai.
+3. Core Features:
+   - Hub: Upload resume and paste job description to analyze.
+   - Dashboard: Renders an overall match score, skill breakdown progress bars, missing skills gap list, and improvement feedback. Export reports as PDF.
+   - Optimizer Sandbox: A live text editor where users edit their CV, get AI-suggested bullet points for missing skills, and instantly rescan to update the score.
+   - Knowledge Base (Docs): Extracted educational explanations for every technology/skill found in the user's CV.
+   - Archive (History): Logged-in users can browse their past analyses and open them directly in the Sandbox.
+4. Themes: Supports Light and Dark mode switching in the top right.
+
+When answering, reference these details. If asked to write a resume bullet point, make it look professional and impact-driven.`;
+
+        // Format history for Gemini API
+        // Gemini expects contents to be an array of: { role: 'user'|'model', parts: [{ text: '...' }] }
+        const contents = [];
+        contents.push({ role: 'user', parts: [{ text: CHAT_SYSTEM_PROMPT }] });
+        contents.push({ role: 'model', parts: [{ text: "Understood. I am the Resume AI Assistant. I will help users navigate the site and optimize their resumes." }] });
+
+        if (history && history.length > 0) {
+            history.forEach(item => {
+                contents.push({
+                    role: item.sender === 'user' ? 'user' : 'model',
+                    parts: [{ text: item.text }]
+                });
+            });
+        }
+
+        contents.push({ role: 'user', parts: [{ text: message }] });
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: contents
+        });
+
+        res.json({ text: response.text });
+    } catch (err) {
+        console.error("Chatbot Error:", err);
+        res.status(500).json({ error: err.message || "An error occurred during chat processing" });
     }
 });
 

@@ -9,14 +9,13 @@ const SkillMatchBars = ({ skills }) => {
             <span>{skill.name}</span>
             <span style={{ color: 'var(--primary-color)' }}>{skill.score}%</span>
           </div>
-          <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
             <div 
               style={{ 
                 '--target-width': `${skill.score}%`,
                 width: 0, 
                 height: '100%', 
                 background: 'var(--primary-color)', 
-                boxShadow: '0 0 10px var(--glow-color)',
                 animation: `fillBar 1.5s cubic-bezier(0.1, 0.7, 0.1, 1) ${i * 0.2}s forwards`
               }} 
             />

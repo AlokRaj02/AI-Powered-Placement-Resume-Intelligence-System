@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Download, AlertCircle, CheckCircle, Lightbulb, ArrowLeft, Target, Award } from 'lucide-react';
+import { Download, AlertCircle, CheckCircle, Lightbulb, ArrowLeft, Target, Award, Sliders } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import SkillMatchBars from './animations/SkillMatchBars';
 
@@ -9,7 +9,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const dashboardRef = useRef(null);
   
-  const result = location.state?.result;
+  const result = location.state?.result || JSON.parse(localStorage.getItem('latest_analysis') || 'null');
 
   if (!result) {
     return (
@@ -46,9 +46,9 @@ const Dashboard = () => {
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (score / 100) * circumference;
   
-  let scoreColor = '#ef4444'; // default danger
-  if (score >= 75) scoreColor = '#10b981'; // success
-  else if (score >= 50) scoreColor = '#f59e0b'; // warning
+  let scoreColor = 'var(--danger)'; // default danger
+  if (score >= 75) scoreColor = 'var(--success)'; // success
+  else if (score >= 50) scoreColor = 'var(--warning)'; // warning
 
   const displaySkills = skills_breakdown && skills_breakdown.length > 0
     ? skills_breakdown
@@ -65,9 +65,14 @@ const Dashboard = () => {
         <button className="btn btn-outline" onClick={() => navigate('/')}>
           <ArrowLeft size={18} /> New Analysis
         </button>
-        <button className="btn btn-primary" onClick={downloadPDF}>
-          <Download size={18} /> Export as PDF
-        </button>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button className="btn btn-outline" onClick={() => navigate('/optimizer', { state: { result } })}>
+            <Sliders size={18} /> Optimize CV
+          </button>
+          <button className="btn btn-primary" onClick={downloadPDF}>
+            <Download size={18} /> Export as PDF
+          </button>
+        </div>
       </div>
 
       <div ref={dashboardRef} className="dashboard-content" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', background: 'var(--bg-color)', padding: '1rem' }}>
@@ -130,7 +135,7 @@ const Dashboard = () => {
             <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {missing_skills && missing_skills.length > 0 ? (
                 missing_skills.map((skill, idx) => (
-                  <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(245, 158, 11, 0.1)', padding: '0.75rem', borderRadius: 'var(--radius-sm)' }}>
+                  <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--warning-light)', padding: '0.75rem', borderRadius: 'var(--radius-sm)' }}>
                     <AlertCircle size={16} className="text-warning" /> <span>{skill}</span>
                   </li>
                 ))
@@ -147,7 +152,7 @@ const Dashboard = () => {
             <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {feedback?.suggestions?.length > 0 ? (
                 feedback.suggestions.map((sug, idx) => (
-                  <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', background: 'rgba(16, 185, 129, 0.1)', padding: '0.75rem', borderRadius: 'var(--radius-sm)' }}>
+                  <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', background: 'var(--success-light)', padding: '0.75rem', borderRadius: 'var(--radius-sm)' }}>
                     <CheckCircle size={16} className="text-success" style={{ marginTop: '0.2rem', flexShrink: 0 }} /> 
                     <span>{sug}</span>
                   </li>
@@ -164,7 +169,7 @@ const Dashboard = () => {
           <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {feedback?.ats_tips?.length > 0 ? (
               feedback.ats_tips.map((tip, idx) => (
-                <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.75rem', borderLeft: '3px solid var(--primary-color)', background: 'rgba(99, 102, 241, 0.05)' }}>
+                <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.75rem', borderLeft: '3px solid var(--primary-color)', background: 'var(--primary-light)' }}>
                   <span>{tip}</span>
                 </li>
               ))
