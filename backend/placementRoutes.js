@@ -1,5 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import User from './models/User.js';
 
 const router = express.Router();
 
@@ -486,36 +488,72 @@ router.get(['/recruiter/students', '/recruiter/students/'], (req, res) => {
 // ==========================================
 
 // A1. POST /api/p06/admin/login
-router.post('/admin/login', (req, res) => {
+router.post('/admin/login', async (req, res) => {
   const { email, username, password } = req.body;
   const inputIdentifier = (email || username || '').trim().toLowerCase();
   const inputPassword = (password || '').trim();
 
+  try {
+    // 1. Check MongoDB Database for Admin User
+    const dbAdmin = await User.findOne({
+      $or: [
+        { email: inputIdentifier },
+        { username: new RegExp(`^${inputIdentifier}$`, 'i') }
+      ]
+    });
+
+    if (dbAdmin && dbAdmin.role === 'admin') {
+      const isMatch = await bcrypt.compare(inputPassword, dbAdmin.password);
+      if (isMatch) {
+        const token = jwt.sign(
+          { id: dbAdmin._id, role: 'admin', email: dbAdmin.email, name: dbAdmin.username },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+
+        return res.json({
+          message: 'Admin authenticated successfully via MongoDB',
+          token,
+          role: 'admin',
+          admin: {
+            id: dbAdmin._id,
+            name: dbAdmin.username,
+            email: dbAdmin.email,
+            role: 'Super Admin'
+          }
+        });
+      }
+    }
+  } catch (dbErr) {
+    console.error('MongoDB admin lookup notice:', dbErr.message);
+  }
+
+  // 2. Fallback check for configured / default admin credentials
   const validIdentifier =
     inputIdentifier === ADMIN_EMAIL.toLowerCase() ||
     inputIdentifier === 'admin' ||
     inputIdentifier === 'admin@placement.edu';
 
-  if (!validIdentifier || inputPassword !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Invalid admin credentials. Use admin@placement.edu / admin123' });
+  if (validIdentifier && inputPassword === ADMIN_PASSWORD) {
+    const token = jwt.sign(
+      { role: 'admin', email: ADMIN_EMAIL, name: 'Placement Officer' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      message: 'Admin authenticated successfully',
+      token,
+      role: 'admin',
+      admin: {
+        name: 'Placement Officer',
+        email: ADMIN_EMAIL,
+        role: 'Super Admin'
+      }
+    });
   }
 
-  const token = jwt.sign(
-    { role: 'admin', email: ADMIN_EMAIL, name: 'Placement Officer' },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-
-  res.json({
-    message: 'Admin authenticated successfully',
-    token,
-    role: 'admin',
-    admin: {
-      name: 'Placement Officer',
-      email: ADMIN_EMAIL,
-      role: 'Super Admin'
-    }
-  });
+  return res.status(401).json({ error: 'Invalid admin credentials. Use admin@placement.edu / admin123' });
 });
 
 // A2. GET /api/p06/admin/drives (returns ALL drives with full approval status)
