@@ -73,18 +73,87 @@ Please extract the top 4 key skills/competencies required in the job description
  */
 app.post('/api/auth/register', async (req, res) => {
     try {
-        const { username, email, dob, password, phone_number } = req.body;
-        if (!email || !password || !username || !dob || !phone_number) return res.status(400).json({ error: "All fields are required" });
-        const existing = await User.findOne({ email });
-        if (existing) return res.status(400).json({ error: "User already exists" });
+        const { username, email, dob, password, phone_number, role, designation, department } = req.body;
+        if (!email || !password || !username || !phone_number) {
+            return res.status(400).json({ error: "Name, email, phone number, and password are required" });
+        }
+
+        const cleanEmail = email.trim().toLowerCase();
+        const existingUser = await User.findOne({ email: cleanEmail });
+        const existingAdmin = await Admin.findOne({ email: cleanEmail });
+        if (existingUser || existingAdmin) {
+            return res.status(400).json({ error: "An account with this email address already exists" });
+        }
+
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        const user = await User.create({ username, email, dob, password: hashedPassword, phone_number });
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'fallback_secret_cyber_ai', { expiresIn: '30d' });
-        res.status(201).json({ token, id: user._id, email: user.email });
+        const userDob = dob ? new Date(dob) : new Date('1990-01-01');
+
+        if (role === 'admin') {
+            const newAdmin = await Admin.create({
+                username: username.trim(),
+                email: cleanEmail,
+                dob: userDob,
+                password: hashedPassword,
+                phone_number: phone_number.trim(),
+                role: 'admin',
+                designation: designation ? designation.trim() : 'Placement Officer',
+                department: department ? department.trim() : 'Training & Placement Cell',
+                permissions: ['manage_drives', 'manage_students', 'manage_eligibility']
+            });
+
+            // Mirror into User collection for unified auth
+            await User.create({
+                username: username.trim(),
+                email: cleanEmail,
+                dob: userDob,
+                password: hashedPassword,
+                phone_number: phone_number.trim(),
+                role: 'admin'
+            }).catch(() => {});
+
+            const token = jwt.sign(
+                { id: newAdmin._id, role: 'admin', email: newAdmin.email, name: newAdmin.username },
+                process.env.JWT_SECRET || 'fallback_secret_cyber_ai',
+                { expiresIn: '30d' }
+            );
+
+            return res.status(201).json({
+                token,
+                id: newAdmin._id,
+                email: newAdmin.email,
+                role: 'admin',
+                username: newAdmin.username,
+                designation: newAdmin.designation
+            });
+        }
+
+        // Candidate / User registration
+        const user = await User.create({ 
+            username: username.trim(), 
+            email: cleanEmail, 
+            dob: userDob, 
+            password: hashedPassword, 
+            phone_number: phone_number.trim(),
+            role: 'user'
+        });
+
+        const token = jwt.sign(
+            { id: user._id, role: 'user', email: user.email, name: user.username },
+            process.env.JWT_SECRET || 'fallback_secret_cyber_ai',
+            { expiresIn: '30d' }
+        );
+
+        res.status(201).json({ 
+            token, 
+            id: user._id, 
+            email: user.email, 
+            role: 'user', 
+            username: user.username 
+        });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Registration failed" });
+        console.error("Registration error:", e);
+        res.status(500).json({ error: "Registration failed: " + e.message });
     }
 });
 
@@ -225,52 +294,103 @@ const transporter = nodemailer.createTransport({
 app.post('/api/auth/forgot-password', async (req, res) => {
     try {
         const { email } = req.body;
-        const user = await User.findOne({ email });
-        if (!user) return res.status(404).json({ error: "User not found" });
+        if (!email) return res.status(400).json({ error: "Email is required" });
+        const cleanEmail = email.trim().toLowerCase();
+
+        // Check dedicated Admin collection first, then User collection
+        let account = await Admin.findOne({ email: cleanEmail });
+        let isAccountAdmin = !!account;
+        if (!account) {
+            account = await User.findOne({ email: cleanEmail });
+        }
+
+        if (!account) return res.status(404).json({ error: "No registered account found with this email" });
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        user.resetOtp = await bcrypt.hash(otp, 10);
-        user.otpExpiry = Date.now() + 10 * 60 * 1000;
-        await user.save();
+        const hashedOtp = await bcrypt.hash(otp, 10);
+        const expiry = Date.now() + 10 * 60 * 1000;
+
+        account.resetOtp = hashedOtp;
+        account.otpExpiry = expiry;
+        await account.save();
+
+        // Also update corresponding record if mirrored
+        if (isAccountAdmin) {
+            const mirroredUser = await User.findOne({ email: cleanEmail });
+            if (mirroredUser) {
+                mirroredUser.resetOtp = hashedOtp;
+                mirroredUser.otpExpiry = expiry;
+                await mirroredUser.save().catch(() => {});
+            }
+        }
 
         if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-            return res.status(500).json({ error: "Email provider not configured on server." });
+            console.log(`[AUTH] Reset OTP for ${cleanEmail}: ${otp}`);
+            return res.json({ 
+                message: `Authorization OTP generated. (For testing: ${otp})`,
+                demoOtp: otp
+            });
         }
 
         const mailOptions = {
             from: process.env.EMAIL_USER,
-            to: user.email,
-            subject: 'RESUME AI: Password Reset OTP',
-            text: `SYSTEM OVERRIDE INITIATED.\n\nYour Authorization OTP is: ${otp}\n\nThis OTP expires in 10 minutes.`
+            to: account.email,
+            subject: isAccountAdmin ? 'RESUME AI: Administrator Password Reset OTP' : 'RESUME AI: Password Reset OTP',
+            text: `SECURITY OVERRIDE INITIATED.\n\nYour Authorization OTP is: ${otp}\n\nThis OTP expires in 10 minutes.`
         };
 
         await transporter.sendMail(mailOptions);
-        res.json({ message: "OTP sent to email" });
+        res.json({ message: "OTP transmitted to email" });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Failed to send email" });
+        console.error("Forgot password error:", e);
+        res.status(500).json({ error: "Failed to process password reset request" });
     }
 });
 
 app.post('/api/auth/reset-password', async (req, res) => {
     try {
         const { email, otp, newPassword } = req.body;
-        const user = await User.findOne({ email });
-        
-        if (!user || !user.resetOtp || !user.otpExpiry) return res.status(400).json({ error: "Invalid request" });
-        if (Date.now() > user.otpExpiry) return res.status(400).json({ error: "OTP expired" });
+        if (!email || !otp || !newPassword) return res.status(400).json({ error: "Email, OTP, and new password are required" });
+        const cleanEmail = email.trim().toLowerCase();
 
-        const isMatch = await bcrypt.compare(otp, user.resetOtp);
-        if (!isMatch) return res.status(400).json({ error: "Invalid OTP" });
+        let account = await Admin.findOne({ email: cleanEmail });
+        let isAccountAdmin = !!account;
+        if (!account) {
+            account = await User.findOne({ email: cleanEmail });
+        }
+        
+        if (!account || !account.resetOtp || !account.otpExpiry) {
+            return res.status(400).json({ error: "Invalid or expired password reset request" });
+        }
+        if (Date.now() > account.otpExpiry) {
+            return res.status(400).json({ error: "OTP has expired. Please request a new one." });
+        }
+
+        const isMatch = await bcrypt.compare(otp, account.resetOtp);
+        if (!isMatch) return res.status(400).json({ error: "Invalid OTP entered" });
 
         const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(newPassword, salt);
-        user.resetOtp = undefined;
-        user.otpExpiry = undefined;
-        await user.save();
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-        res.json({ message: "Password reset successful" });
+        account.password = hashedPassword;
+        account.resetOtp = undefined;
+        account.otpExpiry = undefined;
+        await account.save();
+
+        // Also update corresponding record if mirrored
+        if (isAccountAdmin) {
+            const mirroredUser = await User.findOne({ email: cleanEmail });
+            if (mirroredUser) {
+                mirroredUser.password = hashedPassword;
+                mirroredUser.resetOtp = undefined;
+                mirroredUser.otpExpiry = undefined;
+                await mirroredUser.save().catch(() => {});
+            }
+        }
+
+        res.json({ message: "Password override successful! You may now sign in." });
     } catch (e) {
+        console.error("Reset password error:", e);
         res.status(500).json({ error: "Password reset failed" });
     }
 });

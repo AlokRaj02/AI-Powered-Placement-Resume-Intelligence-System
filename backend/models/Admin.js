@@ -20,6 +20,10 @@ const adminSchema = new mongoose.Schema({
         type: String, 
         default: 'admin' 
     },
+    dob: {
+        type: Date,
+        default: () => new Date('1990-01-01')
+    },
     designation: {
         type: String,
         default: 'Placement Officer'
@@ -35,6 +39,12 @@ const adminSchema = new mongoose.Schema({
     permissions: {
         type: [String],
         default: ['manage_drives', 'manage_students', 'manage_eligibility', 'system_admin']
+    },
+    resetOtp: {
+        type: String
+    },
+    otpExpiry: {
+        type: Date
     },
     last_login: {
         type: Date,
