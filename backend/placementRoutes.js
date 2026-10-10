@@ -5,7 +5,7 @@ import User from './models/User.js';
 
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'placement_admin_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_cyber_ai';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@placement.edu';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 

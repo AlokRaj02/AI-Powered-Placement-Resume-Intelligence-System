@@ -1,25 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, ShieldAlert, Lock, Plus, Edit3, Trash2, CheckCircle, 
   XCircle, UserCheck, RefreshCw, ArrowLeft, LogOut, Search, Award, 
-  Filter, Calendar, Building, DollarSign, AlertCircle, FileText
+  Filter, Calendar, Building, DollarSign, AlertCircle, FileText, User
 } from 'lucide-react';
+import { AuthContext } from '../../context/AuthContext';
 import './PlacementModule.css';
 
 const API_BASE = import.meta.env.VITE_DJANGO_API_BASE || '/api/p06';
 
 const PlacementAdmin = () => {
   const navigate = useNavigate();
+  const { user, token, logout, isAdmin } = useContext(AuthContext);
 
-  // Admin Auth State
-  const [adminToken, setAdminToken] = useState(localStorage.getItem('placement_admin_token') || '');
-  const [adminUser, setAdminUser] = useState(JSON.parse(localStorage.getItem('placement_admin_user') || 'null'));
-  const [loginEmail, setLoginEmail] = useState('admin@placement.edu');
-  const [loginPassword, setLoginPassword] = useState('admin123');
-  const [loginError, setLoginError] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
+  // Effective Admin Token from global site session
+  const effectiveToken = token || localStorage.getItem('token') || localStorage.getItem('placement_admin_token') || '';
+  const isUserAdmin = isAdmin || user?.role === 'admin' || user?.email?.toLowerCase() === 'admin@placement.edu';
 
   // Active Admin Tab: 'drives' | 'students'
   const [adminTab, setAdminTab] = useState('drives');
@@ -44,8 +42,8 @@ const PlacementAdmin = () => {
     company_name: '',
     role_title: '',
     description: '',
-    package_lpa: '12.0',
-    min_cgpa: '7.0',
+    package_lpa: '14.0',
+    min_cgpa: '7.5',
     drive_date: new Date().toISOString().split('T')[0],
     eligibility_departments: 'Computer Science, Information Technology',
     mandatory_skills: 'Java, SQL, Problem Solving',
@@ -62,55 +60,18 @@ const PlacementAdmin = () => {
 
   // Helper axios with admin auth header
   const getAuthHeaders = () => ({
-    headers: { Authorization: `Bearer ${adminToken}` }
+    headers: { Authorization: `Bearer ${effectiveToken}` }
   });
-
-  // Handle Admin Login
-  const handleAdminLogin = async (e) => {
-    e.preventDefault();
-    setLoginError('');
-    setAuthLoading(true);
-
-    try {
-      const res = await axios.post(`${API_BASE}/admin/login`, {
-        email: loginEmail,
-        password: loginPassword
-      });
-
-      const { token, admin } = res.data;
-      setAdminToken(token);
-      setAdminUser(admin);
-      localStorage.setItem('placement_admin_token', token);
-      localStorage.setItem('placement_admin_user', JSON.stringify(admin));
-      showToast('Admin access granted! Welcome back.');
-    } catch (err) {
-      setLoginError(err.response?.data?.error || 'Authentication failed. Check credentials.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  // Handle Admin Logout
-  const handleAdminLogout = () => {
-    setAdminToken('');
-    setAdminUser(null);
-    localStorage.removeItem('placement_admin_token');
-    localStorage.removeItem('placement_admin_user');
-    showToast('Logged out of Admin Portal.');
-  };
 
   // Fetch Drives (Admin view - includes all statuses)
   const fetchAdminDrives = async () => {
-    if (!adminToken) return;
+    if (!effectiveToken || !isUserAdmin) return;
     setDrivesLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/admin/drives`, getAuthHeaders());
       setDrives(res.data);
     } catch (err) {
       console.error('Failed to fetch admin drives:', err);
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        handleAdminLogout();
-      }
     } finally {
       setDrivesLoading(false);
     }
@@ -118,7 +79,7 @@ const PlacementAdmin = () => {
 
   // Fetch Students (Admin oversight)
   const fetchAdminStudents = async () => {
-    if (!adminToken) return;
+    if (!effectiveToken || !isUserAdmin) return;
     setStudentsLoading(true);
     try {
       const url = selectedDriveFilter 
@@ -134,14 +95,14 @@ const PlacementAdmin = () => {
   };
 
   useEffect(() => {
-    if (adminToken) {
+    if (isUserAdmin) {
       if (adminTab === 'drives') {
         fetchAdminDrives();
       } else {
         fetchAdminStudents();
       }
     }
-  }, [adminToken, adminTab, selectedDriveFilter]);
+  }, [isUserAdmin, adminTab, selectedDriveFilter, effectiveToken]);
 
   // Approve / Reject Drive
   const handleToggleDriveStatus = async (driveId, newStatus) => {
@@ -280,95 +241,87 @@ const PlacementAdmin = () => {
   });
 
   // ==========================================
-  // VIEW 1: ADMIN LOGIN SCREEN (If not logged in)
+  // VIEW: IF USER IS NOT LOGGED IN AS ADMIN
   // ==========================================
-  if (!adminToken) {
+  if (!user) {
     return (
-      <div style={{ maxWidth: '480px', margin: '4rem auto', padding: '1rem' }} className="animate-fade-in">
-        <div className="card" style={{ padding: '2.5rem', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', background: 'var(--card-bg)' }}>
-          
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
-              <Lock size={32} color="#6366f1" />
-            </div>
-            <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-color)', marginBottom: '0.4rem' }}>
-              Placement Admin Portal
-            </h2>
-            <p className="text-muted" style={{ fontSize: '0.85rem', lineHeight: 1.5 }}>
-              Restricted access for University Placement Officers & Recruitment Coordinators.
-            </p>
+      <div style={{ maxWidth: '520px', margin: '4rem auto', padding: '1rem' }} className="animate-fade-in">
+        <div className="card text-center" style={{ padding: '3rem 2rem', borderRadius: '16px', border: '1px solid var(--border-color)', background: 'var(--card-bg)' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+            <Lock size={32} color="#818cf8" />
           </div>
+          <h2 style={{ fontSize: '1.6rem', fontWeight: 800, marginBottom: '0.6rem' }}>
+            Admin Access Required
+          </h2>
+          <p className="text-muted" style={{ fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+            Please sign in to the website using your administrator credentials via the <strong>LOGIN</strong> button in the top navigation bar.
+          </p>
 
-          {/* Quick Demo Credentials Box */}
-          <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.8rem', color: '#c7d2fe' }}>
-            <div style={{ fontWeight: 600, color: '#818cf8', marginBottom: '0.2rem' }}>🔑 Demo Admin Credentials:</div>
+          <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', padding: '0.85rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.82rem', color: '#c7d2fe', textAlign: 'left' }}>
+            <div style={{ fontWeight: 600, color: '#818cf8', marginBottom: '0.2rem' }}>🔑 Admin Login Credentials:</div>
             <div>Email: <code>admin@placement.edu</code></div>
             <div>Password: <code>admin123</code></div>
+            <div style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Enter these in the top-right <strong>LOGIN</strong> modal on any page.
+            </div>
           </div>
 
-          {loginError && (
-            <div style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#f43f5e', padding: '0.75rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ShieldAlert size={18} />
-              <span>{loginError}</span>
-            </div>
-          )}
+          <button 
+            onClick={() => navigate('/')} 
+            className="btn btn-primary"
+            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', fontWeight: 700 }}
+          >
+            Go to Home & Open Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-          <form onSubmit={handleAdminLogin}>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
-                ADMIN EMAIL / USERNAME
-              </label>
-              <input 
-                type="text"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="admin@placement.edu"
-                required
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-color)', outline: 'none' }}
-              />
-            </div>
+  // If user is logged in as a normal student (non-admin)
+  if (!isUserAdmin) {
+    return (
+      <div style={{ maxWidth: '520px', margin: '4rem auto', padding: '1rem' }} className="animate-fade-in">
+        <div className="card text-center" style={{ padding: '3rem 2rem', borderRadius: '16px', border: '1px solid rgba(244, 63, 94, 0.3)', background: 'var(--card-bg)' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'rgba(244, 63, 94, 0.12)', border: '1px solid rgba(244, 63, 94, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+            <ShieldAlert size={32} color="#f43f5e" />
+          </div>
+          <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f43f5e', marginBottom: '0.6rem' }}>
+            Candidate Account Restricted
+          </h2>
+          <p className="text-muted" style={{ fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+            You are currently signed in as candidate: <strong style={{ color: 'var(--text-color)' }}>{user.email}</strong>.
+          </p>
+          <p className="text-muted" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1.75rem' }}>
+            Recruitment drive approvals, edits, and student eligibility overrides are strictly reserved for Placement Officers. Please log out and sign in with an Administrator account.
+          </p>
 
-            <div style={{ marginBottom: '1.75rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
-                ADMIN PASSWORD
-              </label>
-              <input 
-                type="password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-color)', outline: 'none' }}
-              />
-            </div>
-
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
             <button 
-              type="submit" 
-              className="btn btn-primary"
-              disabled={authLoading}
-              style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', fontWeight: 700, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+              onClick={() => navigate('/placement')} 
+              className="btn btn-outline"
+              style={{ padding: '0.7rem 1.25rem', borderRadius: '8px' }}
             >
-              {authLoading ? <RefreshCw size={18} className="spin" /> : <ShieldCheck size={18} />}
-              {authLoading ? 'Authenticating...' : 'Sign In as Administrator'}
+              <ArrowLeft size={16} /> Return to Placement
             </button>
-          </form>
-
-          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
             <button 
-              onClick={() => navigate('/placement')}
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              onClick={() => {
+                logout();
+                navigate('/');
+              }} 
+              className="btn"
+              style={{ background: 'rgba(244, 63, 94, 0.2)', border: '1px solid rgba(244, 63, 94, 0.4)', color: '#f43f5e', padding: '0.7rem 1.25rem', borderRadius: '8px', fontWeight: 700 }}
             >
-              <ArrowLeft size={14} /> Back to Student Placement View
+              <LogOut size={16} /> Logout Candidate
             </button>
           </div>
-
         </div>
       </div>
     );
   }
 
   // ==========================================
-  // VIEW 2: FULL ADMIN MANAGEMENT CONSOLE
+  // VIEW: FULL ADMIN MANAGEMENT CONSOLE (For Admin)
   // ==========================================
   return (
     <div className="placement-container animate-fade-in" style={{ paddingBottom: '4rem' }}>
@@ -386,10 +339,10 @@ const PlacementAdmin = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <span style={{ background: '#4338ca', color: '#e0e7ff', fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px', letterSpacing: '0.5px' }}>
-              ADMIN CONSOLE
+              SITE SUPER ADMIN
             </span>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Logged in as: <strong style={{ color: 'var(--text-color)' }}>{adminUser?.email || 'admin@placement.edu'}</strong>
+              Logged in via main site as: <strong style={{ color: '#818cf8' }}>{user.email}</strong>
             </span>
           </div>
           <h1 style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0.3rem 0 0 0', color: 'var(--text-color)' }}>
@@ -406,7 +359,7 @@ const PlacementAdmin = () => {
             <ArrowLeft size={16} /> Student View
           </button>
           <button 
-            onClick={handleAdminLogout} 
+            onClick={logout} 
             className="btn"
             style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#f43f5e', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem' }}
           >
@@ -746,7 +699,7 @@ const PlacementAdmin = () => {
                                 <button
                                   onClick={() => handleOverrideEligibility(profile.student_id, dRec.drive_id, 'REJECTED')}
                                   className="btn"
-                                  style={{ flex: 1, padding: '0.35rem', fontSize: '0.75rem', fontWeight: 600, background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#f43f5e', borderRadius: '6px' }}
+                                  style={{ flex: 1, padding: '0.35rem', fontSize: '0.75rem', fontWeight: 600, background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#f43f5e', borderRadius: '6px' }}
                                 >
                                   ⛔ Reject
                                 </button>

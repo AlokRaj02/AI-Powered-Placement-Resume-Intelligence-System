@@ -90,14 +90,55 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const user = await User.findOne({ email });
-        if (user && (await bcrypt.compare(password, user.password))) {
-            const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'fallback_secret_cyber_ai', { expiresIn: '30d' });
-            res.json({ token, id: user._id, email: user.email });
-        } else {
-            res.status(401).json({ error: "Invalid email or password" });
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email and password are required" });
         }
+
+        const inputIdentifier = email.trim().toLowerCase();
+        const user = await User.findOne({
+            $or: [
+                { email: inputIdentifier },
+                { username: new RegExp(`^${inputIdentifier}$`, 'i') }
+            ]
+        });
+
+        if (user && (await bcrypt.compare(password, user.password))) {
+            const userRole = user.role || 'user';
+            const token = jwt.sign(
+                { id: user._id, role: userRole, email: user.email, name: user.username },
+                process.env.JWT_SECRET || 'fallback_secret_cyber_ai',
+                { expiresIn: '30d' }
+            );
+            return res.json({
+                token,
+                id: user._id,
+                email: user.email,
+                role: userRole,
+                username: user.username
+            });
+        }
+
+        // Fallback check for configured admin credentials
+        const adminEmail = (process.env.ADMIN_EMAIL || 'admin@placement.edu').toLowerCase();
+        const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+        if ((inputIdentifier === adminEmail || inputIdentifier === 'admin') && password === adminPass) {
+            const token = jwt.sign(
+                { id: 'admin_root', role: 'admin', email: adminEmail, name: 'Placement Super Admin' },
+                process.env.JWT_SECRET || 'fallback_secret_cyber_ai',
+                { expiresIn: '30d' }
+            );
+            return res.json({
+                token,
+                id: 'admin_root',
+                email: adminEmail,
+                role: 'admin',
+                username: 'Placement Super Admin'
+            });
+        }
+
+        res.status(401).json({ error: "Invalid email or password" });
     } catch (e) {
+        console.error("Login error:", e);
         res.status(500).json({ error: "Login failed" });
     }
 });

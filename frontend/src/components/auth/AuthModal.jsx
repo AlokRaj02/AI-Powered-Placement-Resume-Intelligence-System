@@ -31,11 +31,11 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
         try {
             if (mode === 'login') {
                 const res = await axios.post('/api/auth/login', { email, password });
-                login(res.data.token, res.data.email);
+                login(res.data.token, res.data.email, res.data.role, res.data.username);
                 onClose();
             } else if (mode === 'register') {
                 const res = await axios.post('/api/auth/register', { username, email, dob, password, phone_number: phone });
-                login(res.data.token, res.data.email);
+                login(res.data.token, res.data.email, res.data.role, res.data.username);
                 onClose();
             } else if (mode === 'forgot') {
                 const res = await axios.post('/api/auth/forgot-password', { email });
@@ -120,6 +120,9 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                         <>
                             <span style={{ color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setMode('forgot'); setError(''); setMsg(''); }}>Forgot Password?</span>
                             <span style={{ color: 'var(--text-muted)' }}>No clearance? <span style={{ color: 'var(--primary-color)', cursor: 'pointer', fontWeight: 'bold' }} onClick={() => { setMode('register'); setError(''); setMsg(''); }}>Request Access</span></span>
+                            <div style={{ marginTop: '0.4rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '0.75rem', color: '#818cf8' }}>
+                                🛡️ Placement Admin? Sign in with <code>admin@placement.edu</code>
+                            </div>
                         </>
                     )}
                     {(mode === 'register' || mode === 'forgot' || mode === 'reset') && (

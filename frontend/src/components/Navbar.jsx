@@ -181,9 +181,30 @@ const Navbar = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.25rem 0.6rem', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: 'var(--radius-sm)', background: 'var(--success-light)' }} className="hide-on-mobile">
-                <User size={14} color="var(--success)" />
-                <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 500, maxWidth: '100px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</span>
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem', 
+                  padding: '0.25rem 0.6rem', 
+                  border: user?.role === 'admin' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid rgba(16, 185, 129, 0.2)', 
+                  borderRadius: 'var(--radius-sm)', 
+                  background: user?.role === 'admin' ? 'rgba(99, 102, 241, 0.15)' : 'var(--success-light)' 
+                }} 
+                className="hide-on-mobile"
+              >
+                {user?.role === 'admin' ? (
+                  <>
+                    <Lock size={13} color="#818cf8" />
+                    <span style={{ fontSize: '0.7rem', color: '#c7d2fe', fontWeight: 700, letterSpacing: '0.5px' }}>ADMIN</span>
+                    <span style={{ fontSize: '0.75rem', color: '#e0e7ff', fontWeight: 500, maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</span>
+                  </>
+                ) : (
+                  <>
+                    <User size={14} color="var(--success)" />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 500, maxWidth: '100px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</span>
+                  </>
+                )}
               </div>
               <button onClick={logout} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.3rem 0.6rem', border: '1px solid rgba(244, 63, 94, 0.2)', borderRadius: 'var(--radius-md)', background: 'var(--danger-light)', color: 'var(--danger)', cursor: 'pointer', outline: 'none', fontSize: '0.75rem', fontWeight: 600 }}>
                 <LogOut size={14} /> <span className="hide-on-mobile">LOGOUT</span>
