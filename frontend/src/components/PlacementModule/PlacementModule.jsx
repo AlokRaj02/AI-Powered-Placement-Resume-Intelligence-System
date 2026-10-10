@@ -4,7 +4,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { Briefcase, CheckCircle, XCircle, Award, BookOpen, Search, UserCheck, ShieldAlert, Sparkles, RefreshCw, BarChart2 } from 'lucide-react';
 import './PlacementModule.css';
 
-const DJANGO_API_BASE = 'http://localhost:8000/api/p06';
+const DJANGO_API_BASE = import.meta.env.VITE_DJANGO_API_BASE || '/api/p06';
 
 const PlacementModule = () => {
   const { user } = useContext(AuthContext);
@@ -26,15 +26,15 @@ const PlacementModule = () => {
     setError(null);
     try {
       // 1. Fetch drives
-      const driveRes = await axios.get(`${DJANGO_API_BASE}/drives/${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ''}`);
+      const driveRes = await axios.get(`${DJANGO_API_BASE}/drives${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ''}`);
       setDrives(driveRes.data);
 
       // 2. Fetch student overview
-      const overviewRes = await axios.get(`${DJANGO_API_BASE}/overview/${studentId}/`);
+      const overviewRes = await axios.get(`${DJANGO_API_BASE}/overview/${studentId}`);
       setStudentOverview(overviewRes.data);
     } catch (err) {
-      console.error('Error fetching P06 data:', err);
-      setError('Could not connect to Django backend (http://localhost:8000). Ensure Django server is running.');
+      console.error('Error fetching placement data:', err);
+      setError(err.response?.data?.error || 'Could not connect to Placement API. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ const PlacementModule = () => {
 
   const handleViewDriveDetails = async (driveId) => {
     try {
-      const evalRes = await axios.get(`${DJANGO_API_BASE}/evaluate/${studentId}/${driveId}/`);
+      const evalRes = await axios.get(`${DJANGO_API_BASE}/evaluate/${studentId}/${driveId}`);
       setSelectedDriveEval(evalRes.data);
     } catch (err) {
       console.error('Error fetching drive evaluation:', err);
@@ -61,7 +61,7 @@ const PlacementModule = () => {
   const fetchRecruiterData = async () => {
     setRecruiterLoading(true);
     try {
-      const res = await axios.get(`${DJANGO_API_BASE}/recruiter/students/`, {
+      const res = await axios.get(`${DJANGO_API_BASE}/recruiter/students`, {
         headers: {
           'X-Recruiter-ID': 'recruiter_admin_1',
           'X-Recruiter-Email': 'placement_officer@university.edu'

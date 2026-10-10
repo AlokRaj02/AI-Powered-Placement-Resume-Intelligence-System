@@ -15,6 +15,7 @@ import User from './models/User.js';
 import { protect, optionalAuth } from './middleware/auth.js';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import placementRoutes from './placementRoutes.js';
 
 dotenv.config();
 
@@ -26,6 +27,9 @@ app.use(cors({
     credentials: true,
 }));
 app.use(express.json());
+
+// Mount Placement Routes
+app.use('/api/p06', placementRoutes);
 
 // Connect to MongoDB
 connectDB();
