@@ -11,10 +11,12 @@ const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
+  const [authRole, setAuthRole] = useState('user');
   const [isThemeOpen, setIsThemeOpen] = useState(false);
 
-  const openAuth = (mode) => {
+  const openAuth = (mode, role = 'user') => {
     setAuthMode(mode);
+    setAuthRole(role);
     setIsAuthOpen(true);
   };
 
@@ -63,7 +65,17 @@ const Navbar = () => {
               <Briefcase size={16} /> PLACEMENT
             </span>
           </Link>
-          <Link to="/placement/admin" className={`nav-link ${location.pathname.startsWith('/placement/admin') || location.pathname === '/admin' ? 'active' : ''}`} title="Placement Officer Admin Console">
+          <Link 
+            to={user?.role === 'admin' ? '/placement/admin' : '#'} 
+            onClick={(e) => {
+              if (user?.role !== 'admin') {
+                e.preventDefault();
+                openAuth('login', 'admin');
+              }
+            }}
+            className={`nav-link ${location.pathname.startsWith('/placement/admin') || location.pathname === '/admin' ? 'active' : ''}`} 
+            title="Placement Officer Admin Console"
+          >
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#818cf8' }}>
               <Lock size={15} /> ADMIN
             </span>
@@ -223,7 +235,7 @@ const Navbar = () => {
         </div>
       </div>
     </nav>
-    <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} initialMode={authMode} />
+    <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} initialMode={authMode} initialRole={authRole} />
     <style dangerouslySetInnerHTML={{__html: `
       @media (max-width: 768px) {
         .hide-on-mobile { display: none !important; }

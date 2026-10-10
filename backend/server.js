@@ -89,12 +89,15 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, loginAsRole } = req.body;
         if (!email || !password) {
             return res.status(400).json({ error: "Email and password are required" });
         }
 
         const inputIdentifier = email.trim().toLowerCase();
+        const adminEmail = (process.env.ADMIN_EMAIL || 'admin@placement.edu').toLowerCase();
+        const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+
         const user = await User.findOne({
             $or: [
                 { email: inputIdentifier },
@@ -104,6 +107,14 @@ app.post('/api/auth/login', async (req, res) => {
 
         if (user && (await bcrypt.compare(password, user.password))) {
             const userRole = user.role || 'user';
+
+            // If user explicitly chose Admin login, ensure their account has admin role
+            if (loginAsRole === 'admin' && userRole !== 'admin') {
+                return res.status(403).json({
+                    error: "Access Denied: This account does not have Administrator privileges. Please choose 'Candidate / User' login."
+                });
+            }
+
             const token = jwt.sign(
                 { id: user._id, role: userRole, email: user.email, name: user.username },
                 process.env.JWT_SECRET || 'fallback_secret_cyber_ai',
@@ -119,8 +130,6 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         // Fallback check for configured admin credentials
-        const adminEmail = (process.env.ADMIN_EMAIL || 'admin@placement.edu').toLowerCase();
-        const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
         if ((inputIdentifier === adminEmail || inputIdentifier === 'admin') && password === adminPass) {
             const token = jwt.sign(
                 { id: 'admin_root', role: 'admin', email: adminEmail, name: 'Placement Super Admin' },
