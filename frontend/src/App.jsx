@@ -7,6 +7,7 @@ import History from './components/History';
 import Docs from './components/Docs';
 import Optimizer from './components/Optimizer';
 import PlacementModule from './components/PlacementModule/PlacementModule';
+import PlacementAdmin from './components/PlacementModule/PlacementAdmin';
 import ChatWidget from './components/ChatWidget';
 import './App.css';
 
@@ -18,6 +19,8 @@ function App() {
         <Routes>
           <Route path="/" element={<UploadForm />} />
           <Route path="/placement" element={<PlacementModule />} />
+          <Route path="/placement/admin" element={<PlacementAdmin />} />
+          <Route path="/admin" element={<PlacementAdmin />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/history" element={<History />} />
           <Route path="/docs" element={<Docs />} />

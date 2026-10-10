@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FileSearch, Clock, Home, BookOpen, User, LogOut, Sliders, Palette, ChevronDown, Briefcase } from 'lucide-react';
+import { FileSearch, Clock, Home, BookOpen, User, LogOut, Sliders, Palette, ChevronDown, Briefcase, Lock } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { AuthContext } from '../context/AuthContext';
 import AuthModal from './auth/AuthModal';
@@ -61,6 +61,11 @@ const Navbar = () => {
           <Link to="/placement" className={`nav-link ${location.pathname === '/placement' ? 'active' : ''}`}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <Briefcase size={16} /> PLACEMENT
+            </span>
+          </Link>
+          <Link to="/placement/admin" className={`nav-link ${location.pathname.startsWith('/placement/admin') || location.pathname === '/admin' ? 'active' : ''}`} title="Placement Officer Admin Console">
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#818cf8' }}>
+              <Lock size={15} /> ADMIN
             </span>
           </Link>
           <Link to="/history" className={`nav-link ${location.pathname === '/history' ? 'active' : ''}`}>

@@ -1,12 +1,17 @@
 import express from 'express';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'placement_admin_secret_key_2026';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@placement.edu';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // Helper to normalize skill strings
 const normalize = (str) => (str ? str.trim().toLowerCase() : '');
 
-// Seed placement drives data
-const DRIVES = [
+// In-memory placement drives data with approval_status
+let DRIVES = [
   {
     id: 1,
     company_name: 'Google',
@@ -18,6 +23,7 @@ const DRIVES = [
     mandatory_skills: ['Java', 'SQL', 'Problem Solving'],
     preferred_skills: ['Spring Boot', 'Distributed Systems', 'Docker'],
     is_active: true,
+    approval_status: 'APPROVED', // 'APPROVED' | 'REJECTED' | 'PENDING'
     drive_date: '2026-11-15'
   },
   {
@@ -31,6 +37,7 @@ const DRIVES = [
     mandatory_skills: ['JavaScript', 'React', 'Node.js', 'SQL'],
     preferred_skills: ['MongoDB', 'AWS', 'TypeScript'],
     is_active: true,
+    approval_status: 'APPROVED',
     drive_date: '2026-11-20'
   },
   {
@@ -44,6 +51,7 @@ const DRIVES = [
     mandatory_skills: ['Python', 'SQL', 'Machine Learning'],
     preferred_skills: ['PyTorch', 'PowerBI', 'PostgreSQL'],
     is_active: true,
+    approval_status: 'APPROVED',
     drive_date: '2026-11-28'
   },
   {
@@ -57,6 +65,7 @@ const DRIVES = [
     mandatory_skills: ['Linux', 'Git', 'Docker', 'Python'],
     preferred_skills: ['Kubernetes', 'CI/CD', 'AWS'],
     is_active: true,
+    approval_status: 'APPROVED',
     drive_date: '2026-12-05'
   },
   {
@@ -70,11 +79,12 @@ const DRIVES = [
     mandatory_skills: ['Java', 'SQL', 'Problem Solving'],
     preferred_skills: ['Spring', 'HTML/CSS', 'Git'],
     is_active: true,
+    approval_status: 'APPROVED',
     drive_date: '2026-12-12'
   }
 ];
 
-// Seed student profiles
+// Student profiles
 const STUDENTS = {
   demo_student_101: {
     student_id: 'demo_student_101',
@@ -132,6 +142,10 @@ const STUDENTS = {
   }
 };
 
+// Admin Eligibility Overrides: key = `${student_id}_${drive_id}`
+// Value: { status: 'APPROVED' | 'REJECTED', remarks: '...', updated_at: '...' }
+const STUDENT_OVERRIDES = {};
+
 // Helper: Get or construct student profile
 function getStudentProfile(studentId, nameQuery) {
   if (STUDENTS[studentId]) {
@@ -156,8 +170,34 @@ function getStudentProfile(studentId, nameQuery) {
   };
 }
 
-// Helper: Evaluate Eligibility
+// Helper: Evaluate Eligibility (incorporates Admin Overrides)
 function evaluateStudentEligibility(profile, drive) {
+  const overrideKey = `${profile.student_id}_${drive.id}`;
+  const override = STUDENT_OVERRIDES[overrideKey];
+
+  // If Admin manually Approved
+  if (override && override.status === 'APPROVED') {
+    return {
+      is_eligible: true,
+      status: 'APPROVED BY ADMIN',
+      gap_reasons: [],
+      missing_mandatory: [],
+      admin_override: override
+    };
+  }
+
+  // If Admin manually Rejected
+  if (override && override.status === 'REJECTED') {
+    return {
+      is_eligible: false,
+      status: 'REJECTED BY ADMIN',
+      gap_reasons: [override.remarks || 'Application placed on hold by Placement Administrator.'],
+      missing_mandatory: [],
+      admin_override: override
+    };
+  }
+
+  // Normal Algorithmic Check
   const gapReasons = [];
 
   // 1. CGPA Check
@@ -193,7 +233,8 @@ function evaluateStudentEligibility(profile, drive) {
     is_eligible: isEligible,
     status: isEligible ? 'ELIGIBLE' : 'INELIGIBLE',
     gap_reasons: gapReasons,
-    missing_mandatory: missingMandatory
+    missing_mandatory: missingMandatory,
+    admin_override: null
   };
 }
 
@@ -326,14 +367,34 @@ function generatePreparationPlan(profile, drive, missingMandatory, missingPrefer
   };
 }
 
+// Admin Auth Middleware
+const requireAdmin = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Access denied: Admin authentication required.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Admin role privileges required.' });
+    }
+    req.admin = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired admin session token.' });
+  }
+};
+
 // ==========================================
-// ROUTES
+// PUBLIC / STUDENT PLACEMENT ROUTES
 // ==========================================
 
-// 1. GET /api/p06/drives (with optional ?q= query)
+// 1. GET /api/p06/drives (students only see active, non-rejected drives)
 router.get(['/drives', '/drives/'], (req, res) => {
   const query = req.query.q ? req.query.q.trim().toLowerCase() : '';
-  let filtered = DRIVES.filter((d) => d.is_active);
+  let filtered = DRIVES.filter((d) => d.is_active && d.approval_status !== 'REJECTED');
 
   if (query) {
     filtered = filtered.filter(
@@ -354,7 +415,7 @@ router.get(['/overview/:studentId', '/overview/:studentId/'], (req, res) => {
   const { studentId } = req.params;
   const profile = getStudentProfile(studentId, req.query.name);
 
-  const evaluations = DRIVES.filter((d) => d.is_active).map((drive) => {
+  const evaluations = DRIVES.filter((d) => d.is_active && d.approval_status !== 'REJECTED').map((drive) => {
     const eligibility = evaluateStudentEligibility(profile, drive);
     const readiness = calculateStudentReadiness(profile, drive, eligibility.missing_mandatory);
     return {
@@ -375,8 +436,8 @@ router.get(['/evaluate/:studentId/:driveId', '/evaluate/:studentId/:driveId/'], 
   const { studentId, driveId } = req.params;
   const drive = DRIVES.find((d) => d.id === parseInt(driveId, 10));
 
-  if (!drive) {
-    return res.status(404).json({ error: 'Placement drive not found' });
+  if (!drive || drive.approval_status === 'REJECTED') {
+    return res.status(404).json({ error: 'Placement drive not found or has been withdrawn.' });
   }
 
   const profile = getStudentProfile(studentId, req.query.name);
@@ -403,7 +464,7 @@ router.get(['/evaluate/:studentId/:driveId', '/evaluate/:studentId/:driveId/'], 
 router.get(['/recruiter/students', '/recruiter/students/'], (req, res) => {
   const recruiterEmail = req.headers['x-recruiter-email'] || 'placement_officer@university.edu';
   const candidates = Object.values(STUDENTS).map((student) => {
-    const readinessRecords = DRIVES.filter((d) => d.is_active).map((drive) => {
+    const readinessRecords = DRIVES.filter((d) => d.is_active && d.approval_status !== 'REJECTED').map((drive) => {
       const eligibility = evaluateStudentEligibility(student, drive);
       return calculateStudentReadiness(student, drive, eligibility.missing_mandatory);
     });
@@ -417,6 +478,246 @@ router.get(['/recruiter/students', '/recruiter/students/'], (req, res) => {
   res.json({
     recruiter_logged: recruiterEmail,
     candidates
+  });
+});
+
+// ==========================================
+// ADMIN EXCLUSIVE ROUTES
+// ==========================================
+
+// A1. POST /api/p06/admin/login
+router.post('/admin/login', (req, res) => {
+  const { email, username, password } = req.body;
+  const inputIdentifier = (email || username || '').trim().toLowerCase();
+  const inputPassword = (password || '').trim();
+
+  const validIdentifier =
+    inputIdentifier === ADMIN_EMAIL.toLowerCase() ||
+    inputIdentifier === 'admin' ||
+    inputIdentifier === 'admin@placement.edu';
+
+  if (!validIdentifier || inputPassword !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Invalid admin credentials. Use admin@placement.edu / admin123' });
+  }
+
+  const token = jwt.sign(
+    { role: 'admin', email: ADMIN_EMAIL, name: 'Placement Officer' },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  res.json({
+    message: 'Admin authenticated successfully',
+    token,
+    role: 'admin',
+    admin: {
+      name: 'Placement Officer',
+      email: ADMIN_EMAIL,
+      role: 'Super Admin'
+    }
+  });
+});
+
+// A2. GET /api/p06/admin/drives (returns ALL drives with full approval status)
+router.get('/admin/drives', requireAdmin, (req, res) => {
+  res.json(DRIVES);
+});
+
+// A3. POST /api/p06/admin/drives (Add a new drive)
+router.post('/admin/drives', requireAdmin, (req, res) => {
+  const {
+    company_name,
+    role_title,
+    description,
+    eligibility_departments,
+    min_cgpa,
+    package_lpa,
+    mandatory_skills,
+    preferred_skills,
+    drive_date
+  } = req.body;
+
+  if (!company_name || !role_title || !min_cgpa) {
+    return res.status(400).json({ error: 'Company name, role title, and minimum CGPA are required.' });
+  }
+
+  const newId = DRIVES.length > 0 ? Math.max(...DRIVES.map((d) => d.id)) + 1 : 1;
+
+  const newDrive = {
+    id: newId,
+    company_name: company_name.trim(),
+    role_title: role_title.trim(),
+    description: description ? description.trim() : 'On-campus recruitment drive.',
+    eligibility_departments: Array.isArray(eligibility_departments)
+      ? eligibility_departments
+      : (eligibility_departments || 'Computer Science, Information Technology').split(',').map((s) => s.trim()),
+    min_cgpa: parseFloat(min_cgpa) || 7.0,
+    package_lpa: parseFloat(package_lpa) || 12.0,
+    mandatory_skills: Array.isArray(mandatory_skills)
+      ? mandatory_skills
+      : (mandatory_skills || '').split(',').map((s) => s.trim()).filter(Boolean),
+    preferred_skills: Array.isArray(preferred_skills)
+      ? preferred_skills
+      : (preferred_skills || '').split(',').map((s) => s.trim()).filter(Boolean),
+    is_active: true,
+    approval_status: 'APPROVED',
+    drive_date: drive_date || new Date().toISOString().split('T')[0]
+  };
+
+  DRIVES.unshift(newDrive);
+  res.status(201).json({ message: 'Drive added successfully', drive: newDrive });
+});
+
+// A4. PUT /api/p06/admin/drives/:id (Edit drive details)
+router.put('/admin/drives/:id', requireAdmin, (req, res) => {
+  const driveId = parseInt(req.params.id, 10);
+  const driveIndex = DRIVES.findIndex((d) => d.id === driveId);
+
+  if (driveIndex === -1) {
+    return res.status(404).json({ error: 'Placement drive not found' });
+  }
+
+  const existing = DRIVES[driveIndex];
+  const {
+    company_name,
+    role_title,
+    description,
+    eligibility_departments,
+    min_cgpa,
+    package_lpa,
+    mandatory_skills,
+    preferred_skills,
+    drive_date,
+    is_active,
+    approval_status
+  } = req.body;
+
+  DRIVES[driveIndex] = {
+    ...existing,
+    company_name: company_name ? company_name.trim() : existing.company_name,
+    role_title: role_title ? role_title.trim() : existing.role_title,
+    description: description !== undefined ? description.trim() : existing.description,
+    eligibility_departments: eligibility_departments !== undefined
+      ? (Array.isArray(eligibility_departments) ? eligibility_departments : eligibility_departments.split(',').map((s) => s.trim()))
+      : existing.eligibility_departments,
+    min_cgpa: min_cgpa !== undefined ? parseFloat(min_cgpa) : existing.min_cgpa,
+    package_lpa: package_lpa !== undefined ? parseFloat(package_lpa) : existing.package_lpa,
+    mandatory_skills: mandatory_skills !== undefined
+      ? (Array.isArray(mandatory_skills) ? mandatory_skills : mandatory_skills.split(',').map((s) => s.trim()).filter(Boolean))
+      : existing.mandatory_skills,
+    preferred_skills: preferred_skills !== undefined
+      ? (Array.isArray(preferred_skills) ? preferred_skills : preferred_skills.split(',').map((s) => s.trim()).filter(Boolean))
+      : existing.preferred_skills,
+    drive_date: drive_date || existing.drive_date,
+    is_active: is_active !== undefined ? is_active : existing.is_active,
+    approval_status: approval_status || existing.approval_status
+  };
+
+  res.json({ message: 'Drive updated successfully', drive: DRIVES[driveIndex] });
+});
+
+// A5. PATCH /api/p06/admin/drives/:id/status (Approve or Reject drive)
+router.patch('/admin/drives/:id/status', requireAdmin, (req, res) => {
+  const driveId = parseInt(req.params.id, 10);
+  const drive = DRIVES.find((d) => d.id === driveId);
+
+  if (!drive) {
+    return res.status(404).json({ error: 'Placement drive not found' });
+  }
+
+  const { approval_status, is_active } = req.body;
+
+  if (approval_status) {
+    drive.approval_status = approval_status; // 'APPROVED' | 'REJECTED' | 'PENDING'
+    if (approval_status === 'REJECTED') {
+      drive.is_active = false;
+    } else if (approval_status === 'APPROVED') {
+      drive.is_active = true;
+    }
+  }
+
+  if (is_active !== undefined) {
+    drive.is_active = Boolean(is_active);
+  }
+
+  res.json({ message: `Drive status updated to ${drive.approval_status}`, drive });
+});
+
+// A6. DELETE /api/p06/admin/drives/:id (Delete drive)
+router.delete('/admin/drives/:id', requireAdmin, (req, res) => {
+  const driveId = parseInt(req.params.id, 10);
+  const driveIndex = DRIVES.findIndex((d) => d.id === driveId);
+
+  if (driveIndex === -1) {
+    return res.status(404).json({ error: 'Placement drive not found' });
+  }
+
+  const deleted = DRIVES.splice(driveIndex, 1)[0];
+  res.json({ message: 'Drive deleted successfully', deleted });
+});
+
+// A7. GET /api/p06/admin/students (View all students and their drive eligibility statuses)
+router.get('/admin/students', requireAdmin, (req, res) => {
+  const driveId = req.query.drive_id ? parseInt(req.query.drive_id, 10) : null;
+  const targetDrives = driveId ? DRIVES.filter((d) => d.id === driveId) : DRIVES;
+
+  const studentList = Object.values(STUDENTS).map((student) => {
+    const driveRecords = targetDrives.map((drive) => {
+      const eligibility = evaluateStudentEligibility(student, drive);
+      const readiness = calculateStudentReadiness(student, drive, eligibility.missing_mandatory);
+      const overrideKey = `${student.student_id}_${drive.id}`;
+      return {
+        drive_id: drive.id,
+        drive_company: drive.company_name,
+        drive_role: drive.role_title,
+        eligibility,
+        readiness,
+        admin_override: STUDENT_OVERRIDES[overrideKey] || null
+      };
+    });
+
+    return {
+      profile: student,
+      drives: driveRecords
+    };
+  });
+
+  res.json({
+    total_students: studentList.length,
+    students: studentList,
+    drives: DRIVES.map((d) => ({ id: d.id, company: d.company_name, role: d.role_title }))
+  });
+});
+
+// A8. PATCH /api/p06/admin/students/:studentId/eligibility (Manually Approve or Reject Student)
+router.patch('/admin/students/:studentId/eligibility', requireAdmin, (req, res) => {
+  const { studentId } = req.params;
+  const { driveId, status, remarks } = req.body;
+
+  if (!driveId || !status) {
+    return res.status(400).json({ error: 'Drive ID and status (APPROVED, REJECTED, RESET) are required.' });
+  }
+
+  const overrideKey = `${studentId}_${driveId}`;
+
+  if (status === 'RESET') {
+    delete STUDENT_OVERRIDES[overrideKey];
+    return res.json({
+      message: `Reset eligibility for student ${studentId} to system evaluation.`,
+      override: null
+    });
+  }
+
+  STUDENT_OVERRIDES[overrideKey] = {
+    status, // 'APPROVED' | 'REJECTED'
+    remarks: remarks || (status === 'APPROVED' ? 'Approved by Placement Officer override.' : 'Rejected by Placement Cell policy.'),
+    admin_officer: req.admin?.email || 'admin@placement.edu',
+    updated_at: new Date().toISOString()
+  };
+
+  res.json({
+    message: `Student ${studentId} manually ${status} for drive #${driveId}.`,
+    override: STUDENT_OVERRIDES[overrideKey]
   });
 });
 

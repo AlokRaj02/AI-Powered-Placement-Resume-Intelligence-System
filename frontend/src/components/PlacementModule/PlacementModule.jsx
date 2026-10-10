@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
-import { Briefcase, CheckCircle, XCircle, Award, BookOpen, Search, UserCheck, ShieldAlert, Sparkles, RefreshCw, BarChart2 } from 'lucide-react';
+import { Briefcase, CheckCircle, XCircle, Award, BookOpen, Search, UserCheck, ShieldAlert, Sparkles, RefreshCw, BarChart2, Lock } from 'lucide-react';
 import './PlacementModule.css';
 
 const DJANGO_API_BASE = import.meta.env.VITE_DJANGO_API_BASE || '/api/p06';
 
 const PlacementModule = () => {
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   const studentId = user ? (user._id || user.id || 'demo_student_101') : 'demo_student_101';
 
@@ -104,6 +106,14 @@ const PlacementModule = () => {
               }}
             >
               <UserCheck size={16} /> Recruiter Portal
+            </button>
+            <button 
+              className="tab-btn"
+              onClick={() => navigate('/placement/admin')}
+              style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}
+              title="Restricted Admin Management Portal"
+            >
+              <Lock size={15} /> Admin Portal
             </button>
           </div>
           <button onClick={loadData} className="btn btn-outline" style={{ padding: '0.5rem', borderRadius: '8px' }} title="Refresh Data">
