@@ -12,6 +12,7 @@ import nodemailer from 'nodemailer';
 import { connectDB } from './db.js';
 import Analysis from './models/Analysis.js';
 import User from './models/User.js';
+import Admin from './models/Admin.js';
 import { protect, optionalAuth } from './middleware/auth.js';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
@@ -98,6 +99,74 @@ app.post('/api/auth/login', async (req, res) => {
         const adminEmail = (process.env.ADMIN_EMAIL || 'admin@placement.edu').toLowerCase();
         const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
 
+        // 1. If user selected Admin role, check dedicated Admins collection first
+        if (loginAsRole === 'admin') {
+            let adminDoc = await Admin.findOne({
+                $or: [
+                    { email: inputIdentifier },
+                    { username: new RegExp(`^${inputIdentifier}$`, 'i') }
+                ]
+            });
+
+            // Check if master credentials match
+            if (!adminDoc && (inputIdentifier === adminEmail || inputIdentifier === 'admin') && password === adminPass) {
+                try {
+                    const salt = await bcrypt.genSalt(10);
+                    const hashed = await bcrypt.hash(adminPass, salt);
+                    adminDoc = await Admin.create({
+                        email: adminEmail,
+                        username: 'Placement Super Admin',
+                        password: hashed,
+                        role: 'admin',
+                        designation: 'Head Placement Officer',
+                        department: 'Training & Placement Cell',
+                        phone_number: '+91-9876543210'
+                    });
+                } catch (seedErr) {
+                    console.error('Error auto-creating Admin doc:', seedErr.message);
+                }
+            }
+
+            // Fallback check in User collection with role: 'admin'
+            if (!adminDoc) {
+                const userAdmin = await User.findOne({
+                    $or: [
+                        { email: inputIdentifier },
+                        { username: new RegExp(`^${inputIdentifier}$`, 'i') }
+                    ],
+                    role: 'admin'
+                });
+                if (userAdmin) adminDoc = userAdmin;
+            }
+
+            if (adminDoc) {
+                const isMatch = adminDoc.password === adminPass || (await bcrypt.compare(password, adminDoc.password));
+                if (isMatch) {
+                    if (adminDoc.save && typeof adminDoc.save === 'function' && adminDoc.last_login !== undefined) {
+                        adminDoc.last_login = new Date();
+                        await adminDoc.save().catch(() => {});
+                    }
+
+                    const token = jwt.sign(
+                        { id: adminDoc._id, role: 'admin', email: adminDoc.email, name: adminDoc.username },
+                        process.env.JWT_SECRET || 'fallback_secret_cyber_ai',
+                        { expiresIn: '30d' }
+                    );
+                    return res.json({
+                        token,
+                        id: adminDoc._id,
+                        email: adminDoc.email,
+                        role: 'admin',
+                        username: adminDoc.username,
+                        designation: adminDoc.designation || 'Placement Officer'
+                    });
+                }
+            }
+
+            return res.status(401).json({ error: "Invalid administrator email or password" });
+        }
+
+        // 2. Candidate / User Authentication
         const user = await User.findOne({
             $or: [
                 { email: inputIdentifier },
@@ -107,14 +176,6 @@ app.post('/api/auth/login', async (req, res) => {
 
         if (user && (await bcrypt.compare(password, user.password))) {
             const userRole = user.role || 'user';
-
-            // If user explicitly chose Admin login, ensure their account has admin role
-            if (loginAsRole === 'admin' && userRole !== 'admin') {
-                return res.status(403).json({
-                    error: "Access Denied: This account does not have Administrator privileges. Please choose 'Candidate / User' login."
-                });
-            }
-
             const token = jwt.sign(
                 { id: user._id, role: userRole, email: user.email, name: user.username },
                 process.env.JWT_SECRET || 'fallback_secret_cyber_ai',
@@ -129,7 +190,7 @@ app.post('/api/auth/login', async (req, res) => {
             });
         }
 
-        // Fallback check for configured admin credentials
+        // Fallback check for configured admin credentials if candidate accidentally entered it in user tab
         if ((inputIdentifier === adminEmail || inputIdentifier === 'admin') && password === adminPass) {
             const token = jwt.sign(
                 { id: 'admin_root', role: 'admin', email: adminEmail, name: 'Placement Super Admin' },

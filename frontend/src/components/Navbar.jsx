@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FileSearch, Clock, Home, BookOpen, User, LogOut, Sliders, Palette, ChevronDown, Briefcase, Lock } from 'lucide-react';
+import { FileSearch, Clock, Home, BookOpen, User, LogOut, Sliders, Palette, ChevronDown, Briefcase, Lock, ShieldCheck } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { AuthContext } from '../context/AuthContext';
 import AuthModal from './auth/AuthModal';
@@ -66,7 +66,7 @@ const Navbar = () => {
             </span>
           </Link>
           <Link 
-            to={user?.role === 'admin' ? '/placement/admin' : '#'} 
+            to={user?.role === 'admin' ? '/admin' : '#'} 
             onClick={(e) => {
               if (user?.role !== 'admin') {
                 e.preventDefault();
@@ -76,8 +76,8 @@ const Navbar = () => {
             className={`nav-link ${location.pathname.startsWith('/placement/admin') || location.pathname === '/admin' ? 'active' : ''}`} 
             title="Placement Officer Admin Console"
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#818cf8' }}>
-              <Lock size={15} /> ADMIN
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#818cf8', fontWeight: 700, padding: '0.2rem 0.5rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '6px', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+              <ShieldCheck size={15} color="#818cf8" /> ADMIN PORTAL
             </span>
           </Link>
           <Link to="/history" className={`nav-link ${location.pathname === '/history' ? 'active' : ''}`}>

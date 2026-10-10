@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from './models/User.js';
+import Admin from './models/Admin.js';
 
 const router = express.Router();
 
@@ -494,15 +495,26 @@ router.post('/admin/login', async (req, res) => {
   const inputPassword = (password || '').trim();
 
   try {
-    // 1. Check MongoDB Database for Admin User
-    const dbAdmin = await User.findOne({
+    // 1. Check dedicated Admins collection first
+    let dbAdmin = await Admin.findOne({
       $or: [
         { email: inputIdentifier },
         { username: new RegExp(`^${inputIdentifier}$`, 'i') }
       ]
     });
 
-    if (dbAdmin && dbAdmin.role === 'admin') {
+    // Fallback to User collection with role: 'admin'
+    if (!dbAdmin) {
+      dbAdmin = await User.findOne({
+        $or: [
+          { email: inputIdentifier },
+          { username: new RegExp(`^${inputIdentifier}$`, 'i') }
+        ],
+        role: 'admin'
+      });
+    }
+
+    if (dbAdmin) {
       const isMatch = await bcrypt.compare(inputPassword, dbAdmin.password);
       if (isMatch) {
         const token = jwt.sign(
@@ -512,14 +524,15 @@ router.post('/admin/login', async (req, res) => {
         );
 
         return res.json({
-          message: 'Admin authenticated successfully via MongoDB',
+          message: 'Admin authenticated successfully via MongoDB Admins collection',
           token,
           role: 'admin',
           admin: {
             id: dbAdmin._id,
             name: dbAdmin.username,
             email: dbAdmin.email,
-            role: 'Super Admin'
+            role: 'Super Admin',
+            designation: dbAdmin.designation || 'Placement Officer'
           }
         });
       }
@@ -757,6 +770,111 @@ router.patch('/admin/students/:studentId/eligibility', requireAdmin, (req, res) 
     message: `Student ${studentId} manually ${status} for drive #${driveId}.`,
     override: STUDENT_OVERRIDES[overrideKey]
   });
+});
+
+// A9. GET /api/p06/admin/admins-list (List all admins from dedicated Admins collection)
+router.get('/admin/admins-list', requireAdmin, async (req, res) => {
+  try {
+    let admins = await Admin.find({}, '-password').sort({ createdAt: -1 });
+    if (!admins || admins.length === 0) {
+      // Seed default admin document into MongoDB collection
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
+      const defaultAdmin = await Admin.create({
+        email: ADMIN_EMAIL,
+        username: 'Placement Super Admin',
+        password: hashedPassword,
+        role: 'admin',
+        designation: 'Head Placement Officer',
+        department: 'Training & Placement Cell',
+        phone_number: '+91-9876543210',
+        permissions: ['manage_drives', 'manage_students', 'manage_eligibility', 'system_admin']
+      });
+      admins = [defaultAdmin];
+    }
+    res.json({
+      success: true,
+      total: admins.length,
+      admins
+    });
+  } catch (err) {
+    console.error('Failed to list admins:', err.message);
+    res.json({
+      success: true,
+      total: 1,
+      admins: [{
+        _id: 'default_admin',
+        email: ADMIN_EMAIL,
+        username: 'Placement Super Admin',
+        role: 'admin',
+        designation: 'Head Placement Officer',
+        department: 'Training & Placement Cell',
+        phone_number: '+91-9876543210'
+      }]
+    });
+  }
+});
+
+// A10. POST /api/p06/admin/create-admin (Add new administrator into dedicated Admins collection)
+router.post('/admin/create-admin', requireAdmin, async (req, res) => {
+  try {
+    const { email, username, password, designation, department, phone_number } = req.body;
+    if (!email || !username || !password) {
+      return res.status(400).json({ error: 'Username, email, and password are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const existing = await Admin.findOne({ email: cleanEmail });
+    if (existing) {
+      return res.status(400).json({ error: `Administrator with email ${cleanEmail} already exists in database.` });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newAdmin = await Admin.create({
+      email: cleanEmail,
+      username: username.trim(),
+      password: hashedPassword,
+      role: 'admin',
+      designation: designation ? designation.trim() : 'Placement Coordinator',
+      department: department ? department.trim() : 'Training & Placement Cell',
+      phone_number: phone_number ? phone_number.trim() : '+91-9876543210',
+      permissions: ['manage_drives', 'manage_students', 'manage_eligibility']
+    });
+
+    // Also mirror to User collection for unified auth
+    try {
+      const existingUser = await User.findOne({ email: cleanEmail });
+      if (!existingUser) {
+        await User.create({
+          email: cleanEmail,
+          username: username.trim(),
+          password: hashedPassword,
+          role: 'admin',
+          dob: new Date('1990-01-01'),
+          phone_number: phone_number ? phone_number.trim() : '+91-9876543210'
+        });
+      }
+    } catch (uErr) {
+      console.error('Mirror to User note:', uErr.message);
+    }
+
+    res.status(201).json({
+      message: 'New administrator created successfully in MongoDB!',
+      admin: {
+        _id: newAdmin._id,
+        email: newAdmin.email,
+        username: newAdmin.username,
+        role: newAdmin.role,
+        designation: newAdmin.designation,
+        department: newAdmin.department
+      }
+    });
+  } catch (err) {
+    console.error('Error creating admin:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to create administrator.' });
+  }
 });
 
 export default router;

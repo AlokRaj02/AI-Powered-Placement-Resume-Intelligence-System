@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import User from './models/User.js';
+import Admin from './models/Admin.js';
 
 dotenv.config();
 
@@ -16,41 +17,60 @@ async function seedAdmin() {
     await mongoose.connect(MONGODB_URI);
     console.log('MongoDB connected successfully.');
 
-    // Check if admin already exists
-    const existing = await User.findOne({ email: ADMIN_EMAIL });
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
 
-    if (existing) {
-      existing.role = 'admin';
-      existing.username = ADMIN_USERNAME;
-      existing.password = hashedPassword;
-      await existing.save();
-      console.log(`Successfully updated existing user to Admin:`);
-      console.log(`Email: ${ADMIN_EMAIL}`);
-      console.log(`Role: ${existing.role}`);
-      console.log(`Password reset to: ${ADMIN_PASSWORD}`);
+    // 1. Seed into dedicated 'admins' collection
+    const existingAdminDoc = await Admin.findOne({ email: ADMIN_EMAIL });
+    if (existingAdminDoc) {
+      existingAdminDoc.username = ADMIN_USERNAME;
+      existingAdminDoc.password = hashedPassword;
+      existingAdminDoc.role = 'admin';
+      await existingAdminDoc.save();
+      console.log(`Updated existing document in 'admins' collection for: ${ADMIN_EMAIL}`);
     } else {
-      const newAdmin = await User.create({
+      const createdAdmin = await Admin.create({
+        email: ADMIN_EMAIL,
+        username: ADMIN_USERNAME,
+        password: hashedPassword,
+        role: 'admin',
+        designation: 'Head Placement Officer',
+        department: 'Training & Placement Cell',
+        phone_number: '+91-9876543210',
+        permissions: ['manage_drives', 'manage_students', 'manage_eligibility', 'system_admin']
+      });
+      console.log(`Successfully created new document in 'admins' collection:`);
+      console.log(`ID: ${createdAdmin._id} | Collection: admins | Email: ${createdAdmin.email}`);
+    }
+
+    // 2. Also ensure User collection has role: 'admin'
+    const existingUser = await User.findOne({ email: ADMIN_EMAIL });
+    if (existingUser) {
+      existingUser.role = 'admin';
+      existingUser.username = ADMIN_USERNAME;
+      existingUser.password = hashedPassword;
+      await existingUser.save();
+      console.log(`Updated existing user in 'users' collection to role: admin`);
+    } else {
+      const newAdminUser = await User.create({
         email: ADMIN_EMAIL,
         username: ADMIN_USERNAME,
         password: hashedPassword,
         role: 'admin',
         dob: new Date('1990-01-01'),
-        phone_number: '+1-555-0199'
+        phone_number: '+91-9876543210'
       });
-      console.log(`Successfully created new Admin user in MongoDB:`);
-      console.log(`ID: ${newAdmin._id}`);
-      console.log(`Email: ${newAdmin.email}`);
-      console.log(`Role: ${newAdmin.role}`);
-      console.log(`Password: ${ADMIN_PASSWORD}`);
+      console.log(`Created admin user in 'users' collection: ID: ${newAdminUser._id}`);
     }
 
-    console.log('\nAdmin database setup is complete!');
-    await mongoose.disconnect();
+    console.log('\n--- ADMIN SEED COMPLETE ---');
+    console.log(`Login URL: /placement/admin or /admin`);
+    console.log(`Email:    ${ADMIN_EMAIL}`);
+    console.log(`Password: ${ADMIN_PASSWORD}`);
+    console.log(`Collections populated: 'admins' and 'users'`);
     process.exit(0);
-  } catch (err) {
-    console.error('Error seeding admin into database:', err.message);
+  } catch (error) {
+    console.error('Error seeding admin user:', error);
     process.exit(1);
   }
 }

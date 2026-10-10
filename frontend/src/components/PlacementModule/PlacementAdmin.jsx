@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, ShieldAlert, Lock, Plus, Edit3, Trash2, CheckCircle, 
   XCircle, UserCheck, RefreshCw, ArrowLeft, LogOut, Search, Award, 
-  Filter, Calendar, Building, DollarSign, AlertCircle, FileText, User
+  Filter, Calendar, Building, DollarSign, AlertCircle, FileText, User,
+  Database, Users, Key, Briefcase
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import './PlacementModule.css';
@@ -58,6 +59,20 @@ const PlacementAdmin = () => {
     setTimeout(() => setToast(''), 3500);
   };
 
+  // Administrator Directory State (Dedicated MongoDB 'admins' collection)
+  const [adminsList, setAdminsList] = useState([]);
+  const [adminsLoading, setAdminsLoading] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminFormData, setAdminFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    designation: 'Placement Coordinator',
+    department: 'Training & Placement Cell',
+    phone_number: '+91-9876543210'
+  });
+  const [adminModalError, setAdminModalError] = useState('');
+
   // Helper axios with admin auth header
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${effectiveToken}` }
@@ -94,11 +109,56 @@ const PlacementAdmin = () => {
     }
   };
 
+  // Fetch Admins List (from dedicated MongoDB 'admins' collection)
+  const fetchAdminsList = async () => {
+    if (!effectiveToken || !isUserAdmin) return;
+    setAdminsLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/admin/admins-list`, getAuthHeaders());
+      setAdminsList(res.data.admins || []);
+    } catch (err) {
+      console.error('Failed to fetch admins list:', err);
+    } finally {
+      setAdminsLoading(false);
+    }
+  };
+
+  // Create New Admin in MongoDB
+  const handleCreateAdmin = async (e) => {
+    e.preventDefault();
+    setAdminModalError('');
+    if (!adminFormData.username || !adminFormData.email || !adminFormData.password) {
+      return setAdminModalError('Name, email, and password are required.');
+    }
+    try {
+      await axios.post(`${API_BASE}/admin/create-admin`, adminFormData, getAuthHeaders());
+      showToast(`Admin account ${adminFormData.email} created in MongoDB!`);
+      setIsAdminModalOpen(false);
+      setAdminFormData({
+        username: '',
+        email: '',
+        password: '',
+        designation: 'Placement Coordinator',
+        department: 'Training & Placement Cell',
+        phone_number: '+91-9876543210'
+      });
+      fetchAdminsList();
+    } catch (err) {
+      setAdminModalError(err.response?.data?.error || 'Failed to create administrator.');
+    }
+  };
+
   useEffect(() => {
     if (isUserAdmin) {
       if (adminTab === 'drives') {
         fetchAdminDrives();
-      } else {
+      } else if (adminTab === 'students') {
+        fetchAdminStudents();
+      } else if (adminTab === 'admins') {
+        fetchAdminsList();
+      } else if (adminTab === 'analytics') {
+        fetchAdminsList();
+        fetchAdminDrives();
         fetchAdminStudents();
       }
     }
@@ -411,6 +471,19 @@ const PlacementAdmin = () => {
           >
             <UserCheck size={16} /> Student Eligibility Oversight
           </button>
+          <button 
+            className={`tab-btn ${adminTab === 'admins' ? 'active' : ''}`}
+            onClick={() => setAdminTab('admins')}
+            style={adminTab === 'admins' ? { borderColor: '#818cf8', color: '#818cf8' } : {}}
+          >
+            <ShieldCheck size={16} /> Admins Directory ({adminsList.length})
+          </button>
+          <button 
+            className={`tab-btn ${adminTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setAdminTab('analytics')}
+          >
+            <Database size={16} /> Database & System Analytics
+          </button>
         </div>
 
         {adminTab === 'drives' && (
@@ -420,6 +493,19 @@ const PlacementAdmin = () => {
             style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
             <Plus size={18} /> Add New Drive
+          </button>
+        )}
+
+        {adminTab === 'admins' && (
+          <button 
+            onClick={() => {
+              setAdminModalError('');
+              setIsAdminModalOpen(true);
+            }} 
+            className="btn btn-primary"
+            style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#6366f1', color: '#fff' }}
+          >
+            <Plus size={18} /> Provision New Admin
           </button>
         )}
       </div>
@@ -725,6 +811,265 @@ const PlacementAdmin = () => {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 3: DEDICATED ADMINISTRATORS DIRECTORY */}
+      {adminTab === 'admins' && (
+        <div className="animate-fade-in">
+          {/* Information Banner */}
+          <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(99, 102, 241, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Database size={22} color="#818cf8" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#c7d2fe' }}>
+                  MongoDB Dedicated Collection: <code>resume_analyzer.admins</code>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  This separate database section stores verified Placement Officers and administrative personnel.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                onClick={fetchAdminsList} 
+                className="btn btn-outline" 
+                style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+              >
+                <RefreshCw size={14} className={adminsLoading ? 'animate-spin' : ''} /> Refresh
+              </button>
+              <button 
+                onClick={() => {
+                  setAdminModalError('');
+                  setIsAdminModalOpen(true);
+                }} 
+                className="btn btn-primary" 
+                style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', background: '#6366f1', color: '#fff' }}
+              >
+                <Plus size={14} /> Add Administrator
+              </button>
+            </div>
+          </div>
+
+          {adminsLoading ? (
+            <div className="text-center" style={{ padding: '3rem' }}>
+              <RefreshCw size={28} className="animate-spin" color="#818cf8" style={{ margin: '0 auto 1rem' }} />
+              <p className="text-muted">Loading administrator records from MongoDB...</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.25rem' }}>
+              {adminsList.map((adm, idx) => (
+                <div key={adm._id || idx} className="card" style={{ padding: '1.5rem', borderRadius: '14px', border: '1px solid var(--border-color)', position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #4338ca)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.1rem' }}>
+                        {(adm.username || 'A')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>{adm.username}</h3>
+                        <div style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>{adm.designation || 'Placement Officer'}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      VERIFIED ADMIN
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.25rem' }}>
+                    <div>📧 <strong>Email:</strong> <code>{adm.email}</code></div>
+                    <div>🏢 <strong>Department:</strong> {adm.department || 'Training & Placement Cell'}</div>
+                    {adm.phone_number && <div>📞 <strong>Contact:</strong> {adm.phone_number}</div>}
+                    <div>🔑 <strong>Role:</strong> <span style={{ color: '#818cf8', fontWeight: 600 }}>{adm.role || 'admin'}</span></div>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    <span>Database ID: <code style={{ fontSize: '0.7rem' }}>{(adm._id || '').slice(-6) || 'root'}</code></span>
+                    <span style={{ color: '#10b981', fontWeight: 600 }}>Active Clearance</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: DATABASE & SYSTEM ANALYTICS */}
+      {adminTab === 'analytics' && (
+        <div className="animate-fade-in">
+          {/* Database Collections Architecture */}
+          <div style={{ marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Database size={20} color="#818cf8" /> MongoDB Cluster Architecture (Cluster0)
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+              
+              <div className="card" style={{ padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.3)', background: 'rgba(99, 102, 241, 0.05)' }}>
+                <div style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 700 }}>COLLECTION: admins</div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.3rem 0', color: '#818cf8' }}>
+                  {adminsList.length || 1}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Stores Placement Officers, access clearances, and credential hashes.
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 700 }}>COLLECTION: users</div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.3rem 0', color: '#10b981' }}>
+                  Active Pool
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Registered candidates, students, and applicant profiles.
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700 }}>COLLECTION: analyses</div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.3rem 0', color: '#38bdf8' }}>
+                  AI Archives
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Parsed resumes, ATS gap matches, and LLM intelligence reports.
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 700 }}>COLLECTION: drives</div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.3rem 0', color: '#f59e0b' }}>
+                  {drives.length}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  On-campus hiring schedules, salary LPA tiers, and skill matrix.
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* System Security & Placement Metrics */}
+          <div className="card" style={{ padding: '1.75rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ShieldCheck size={18} color="#10b981" /> System Security & Access Enforcement
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', fontSize: '0.85rem' }}>
+              <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-color)', marginBottom: '0.3rem' }}>Role-Based Gatekeeper (RBAC)</div>
+                <div style={{ color: 'var(--text-muted)' }}>Endpoints verify tokens with <code>role: 'admin'</code> before processing drive alterations or student waivers.</div>
+              </div>
+              <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-color)', marginBottom: '0.3rem' }}>Password Hashing</div>
+                <div style={{ color: 'var(--text-muted)' }}>All administrator credentials are encrypted using bcrypt with salt rounds before persistence.</div>
+              </div>
+              <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-color)', marginBottom: '0.3rem' }}>Session Protocol</div>
+                <div style={{ color: 'var(--text-muted)' }}>Cryptographically signed JSON Web Tokens (JWT) with seamless auto-renewal and timeout protection.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PROVISION NEW ADMINISTRATOR */}
+      {isAdminModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', maxWidth: '520px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }} className="animate-fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+              <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <ShieldCheck size={20} color="#818cf8" /> Provision New Administrator
+              </h2>
+              <button onClick={() => setIsAdminModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.5rem', cursor: 'pointer' }}>
+                ×
+              </button>
+            </div>
+
+            {adminModalError && (
+              <div style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#f43f5e', padding: '0.75rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
+                {adminModalError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateAdmin}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>FULL NAME / OFFICER NAME *</label>
+                <input 
+                  type="text"
+                  value={adminFormData.username}
+                  onChange={(e) => setAdminFormData({ ...adminFormData, username: e.target.value })}
+                  placeholder="e.g. Dr. Rajesh Kumar"
+                  required
+                  style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>OFFICIAL UNIVERSITY EMAIL *</label>
+                <input 
+                  type="email"
+                  value={adminFormData.email}
+                  onChange={(e) => setAdminFormData({ ...adminFormData, email: e.target.value })}
+                  placeholder="e.g. placement.officer@university.edu"
+                  required
+                  style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>INITIAL ADMIN PASSWORD *</label>
+                <input 
+                  type="password"
+                  value={adminFormData.password}
+                  onChange={(e) => setAdminFormData({ ...adminFormData, password: e.target.value })}
+                  placeholder="Create secure access secret"
+                  required
+                  style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>DESIGNATION</label>
+                  <input 
+                    type="text"
+                    value={adminFormData.designation}
+                    onChange={(e) => setAdminFormData({ ...adminFormData, designation: e.target.value })}
+                    placeholder="Placement Coordinator"
+                    style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.3rem' }}>CONTACT PHONE</label>
+                  <input 
+                    type="text"
+                    value={adminFormData.phone_number}
+                    onChange={(e) => setAdminFormData({ ...adminFormData, phone_number: e.target.value })}
+                    placeholder="+91-9876543210"
+                    style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setIsAdminModalOpen(false)}
+                  className="btn btn-outline"
+                  style={{ padding: '0.65rem 1.25rem', borderRadius: '8px' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  style={{ padding: '0.65rem 1.5rem', borderRadius: '8px', fontWeight: 700, background: '#6366f1', color: '#fff' }}
+                >
+                  Save to MongoDB Admins
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
